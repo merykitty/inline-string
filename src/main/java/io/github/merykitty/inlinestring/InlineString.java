@@ -25,7 +25,6 @@ package io.github.merykitty.inlinestring;
  * questions.
  */
 
-import java.io.ObjectStreamField;
 import java.io.UnsupportedEncodingException;
 import java.lang.constant.Constable;
 import java.nio.ByteBuffer;
@@ -126,7 +125,7 @@ import io.github.merykitty.inlinestring.internal.Utils;
 
 @__primitive__
 public class InlineString
-        implements java.io.Serializable, Comparable<InlineString.ref>, CharSequence, Constable {
+        implements Comparable<InlineString.ref>, CharSequence, Constable {
 
     /**
      * The value is used for character storage.
@@ -142,21 +141,7 @@ public class InlineString
      */
     private final byte coder;
 
-    @java.io.Serial
-    private static final long serialVersionUID = -6849794470754667710L;
-
     static final InlineString EMPTY_STRING = new InlineString(Utils.stringValue(""), Utils.stringCoder(""));
-
-    /**
-     * Class String is special cased within the Serialization Stream Protocol.
-     *
-     * A String instance is written into an ObjectOutputStream according to
-     * <a href="{@docRoot}/../specs/serialization/protocol.html#stream-elements">
-     * Object Serialization Specification, Section 6.2, "Stream Elements"</a>
-     */
-    @java.io.Serial
-    private static final ObjectStreamField[] serialPersistentFields =
-            new ObjectStreamField[0];
 
     /**
      * Initializes a newly created {@code String} object so that it represents
@@ -1527,9 +1512,9 @@ public class InlineString
      * @see  #codePoints()
      */
     public boolean equalsIgnoreCase(InlineString anotherString) {
-        return (this.value == anotherString.value && this.coder == anotherString.coder) ? true
-                : (anotherString.length() == length())
-                && regionMatches(true, 0, anotherString, 0, length());
+        return (this.value == anotherString.value && this.coder() == anotherString.coder())
+                || (anotherString.length() == length()
+                        && regionMatches(true, 0, anotherString, 0, length()));
     }
 
     /**
@@ -1576,6 +1561,7 @@ public class InlineString
      *          value greater than {@code 0} if this string is
      *          lexicographically greater than the string argument.
      */
+    @Override
     public int compareTo(InlineString.ref anotherString) {
         byte v1[] = value;
         byte v2[] = anotherString.value;
@@ -1589,9 +1575,8 @@ public class InlineString
     }
 
     /**
-     * A Comparator that orders {@code PrimitiveString} objects as by
+     * A Comparator that orders {@code InlineString} objects as by
      * {@link #compareToIgnoreCase(InlineString) compareToIgnoreCase}.
-     * This comparator is serializable.
      * <p>
      * Note that this Comparator does <em>not</em> take locale into account,
      * and will result in an unsatisfactory ordering for certain locales.
@@ -1601,32 +1586,16 @@ public class InlineString
      * @since   1.2
      */
     public static final Comparator<InlineString.ref> CASE_INSENSITIVE_ORDER
-            = new CaseInsensitiveComparator();
-
-    /**
-     * CaseInsensitiveComparator for Strings.
-     */
-    private static class CaseInsensitiveComparator
-            implements Comparator<InlineString.ref>, java.io.Serializable {
-        // use serialVersionUID from JDK 1.2.2 for interoperability
-        @java.io.Serial
-        private static final long serialVersionUID = 8575799808933029326L;
-
-        public int compare(InlineString.ref s1, InlineString.ref s2) {
-            byte v1[] = s1.value;
-            byte v2[] = s2.value;
-            if (s1.coder() == s2.coder()) {
-                return s1.isLatin1() ? StringLatin1.compareToCI(v1, v2)
-                        : StringUTF16.compareToCI(v1, v2);
-            }
-            return s1.isLatin1() ? StringLatin1.compareToCI_UTF16(v1, v2)
-                    : StringUTF16.compareToCI_Latin1(v1, v2);
+            = (s1, s2) -> {
+        byte v1[] = s1.value;
+        byte v2[] = s2.value;
+        if (s1.coder() == s2.coder()) {
+            return s1.isLatin1() ? StringLatin1.compareToCI(v1, v2)
+                    : StringUTF16.compareToCI(v1, v2);
         }
-
-        /** Replaces the de-serialized object. */
-        @java.io.Serial
-        private Object readResolve() { return CASE_INSENSITIVE_ORDER; }
-    }
+        return s1.isLatin1() ? StringLatin1.compareToCI_UTF16(v1, v2)
+                : StringUTF16.compareToCI_Latin1(v1, v2);
+    };
 
     /**
      * Compares two strings lexicographically, ignoring case
