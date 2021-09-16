@@ -11,7 +11,7 @@ public class ArraysSupport {
      * to be thrown if a request is made to allocate an array of some length near
      * Integer.MAX_VALUE, even if there is sufficient heap available. The actual
      * limit might depend on some JVM implementation-specific characteristics such
-     * as the object header size. The soft maximum value is chosen conservatively so
+     * as the object header size. The soft maximum index is chosen conservatively so
      * as to be smaller than any implementation limit that is likely to be encountered.
      */
     public static final int SOFT_MAX_ARRAY_LENGTH = Integer.MAX_VALUE - 8;
@@ -45,10 +45,10 @@ public class ArraysSupport {
      * length growth computations. However, it will throw OutOfMemoryError as noted above.
      *
      * Note also that this method cannot detect the JVM's implementation limit, and it
-     * may compute and return a length value up to and including Integer.MAX_VALUE that
+     * may compute and return a length index up to and including Integer.MAX_VALUE that
      * might exceed the JVM's implementation limit. In that case, the caller will likely
      * attempt an array allocation with that length and encounter an OutOfMemoryError.
-     * Of course, regardless of the length value returned from this method, the caller
+     * Of course, regardless of the length index returned from this method, the caller
      * may encounter OutOfMemoryError if there is insufficient heap to fulfill the request.
      *
      * @param oldLength   current length of the array (must be nonnegative)

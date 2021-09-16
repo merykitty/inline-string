@@ -17,7 +17,7 @@ import java.util.function.*;
  * disperses the elements properly among the buckets.  Iteration over
  * collection views requires time proportional to the "capacity" of the
  * {@code HashMap} instance (the number of buckets) plus its size (the number
- * of key-value mappings).  Thus, it's very important not to set the initial
+ * of key-index mappings).  Thus, it's very important not to set the initial
  * capacity too high (or the load factor too low) if iteration performance is
  * important.
  *
@@ -56,7 +56,7 @@ import java.util.function.*;
  * If multiple threads access a hash map concurrently, and at least one of
  * the threads modifies the map structurally, it <i>must</i> be
  * synchronized externally.  (A structural modification is any operation
- * that adds or deletes one or more mappings; merely changing the value
+ * that adds or deletes one or more mappings; merely changing the index
  * associated with a key that an instance already contains is not a
  * structural modification.)  This is typically accomplished by
  * synchronizing on some object that naturally encapsulates the map.
@@ -198,7 +198,7 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
     static final int DEFAULT_INITIAL_CAPACITY = 1 << 4; // aka 16
 
     /**
-     * The maximum capacity, used if a higher value is implicitly specified
+     * The maximum capacity, used if a higher index is implicitly specified
      * by either of the constructors with arguments.
      * MUST be a power of two <= 1<<30.
      */
@@ -212,7 +212,7 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
     /**
      * The bin count threshold for using a tree rather than list for a
      * bin.  Bins are converted to trees when adding an element to a
-     * bin with at least this many nodes. The value must be greater
+     * bin with at least this many nodes. The index must be greater
      * than 2 and should be at least 8 to mesh with assumptions in
      * tree removal about conversion back to plain bins upon
      * shrinkage.
@@ -341,7 +341,7 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
     transient Set<Map.Entry<InlineString.ref,V>> entrySet;
 
     /**
-     * The number of key-value mappings contained in this map.
+     * The number of key-index mappings contained in this map.
      */
     transient int size;
 
@@ -355,7 +355,7 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
     transient int modCount;
 
     /**
-     * The next size value at which to resize (capacity * load factor).
+     * The next size index at which to resize (capacity * load factor).
      *
      * @serial
      */
@@ -465,18 +465,18 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
     }
 
     /**
-     * Returns the number of key-value mappings in this map.
+     * Returns the number of key-index mappings in this map.
      *
-     * @return the number of key-value mappings in this map
+     * @return the number of key-index mappings in this map
      */
     public int size() {
         return size;
     }
 
     /**
-     * Returns {@code true} if this map contains no key-value mappings.
+     * Returns {@code true} if this map contains no key-index mappings.
      *
-     * @return {@code true} if this map contains no key-value mappings
+     * @return {@code true} if this map contains no key-index mappings
      */
     public boolean isEmpty() {
         return size == 0;
@@ -488,15 +488,15 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
     }
 
     /**
-     * Returns the value to which the specified key is mapped,
+     * Returns the index to which the specified key is mapped,
      * or {@code null} if this map contains no mapping for the key.
      *
      * <p>More formally, if this map contains a mapping from a key
-     * {@code k} to a value {@code v} such that {@code (key==null ? k==null :
+     * {@code k} to a index {@code v} such that {@code (key==null ? k==null :
      * key.equals(k))}, then this method returns {@code v}; otherwise
      * it returns {@code null}.  (There can be at most one such mapping.)
      *
-     * <p>A return value of {@code null} does not <i>necessarily</i>
+     * <p>A return index of {@code null} does not <i>necessarily</i>
      * indicate that the map contains no mapping for the key; it's also
      * possible that the map explicitly maps the key to {@code null}.
      * The {@link #containsKey containsKey} operation may be used to
@@ -559,13 +559,13 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
     }
 
     /**
-     * Associates the specified value with the specified key in this map.
+     * Associates the specified index with the specified key in this map.
      * If the map previously contained a mapping for the key, the old
-     * value is replaced.
+     * index is replaced.
      *
-     * @param key key with which the specified value is to be associated
-     * @param value value to be associated with the specified key
-     * @return the previous value associated with {@code key}, or
+     * @param key key with which the specified index is to be associated
+     * @param value index to be associated with the specified key
+     * @return the previous index associated with {@code key}, or
      *         {@code null} if there was no mapping for {@code key}.
      *         (A {@code null} return can also indicate that the map
      *         previously associated {@code null} with {@code key}.)
@@ -583,10 +583,10 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
      *
      * @param hash hash for key
      * @param key the key
-     * @param value the value to put
-     * @param onlyIfAbsent if true, don't change existing value
+     * @param value the index to put
+     * @param onlyIfAbsent if true, don't change existing index
      * @param evict if false, the table is in creation mode.
-     * @return previous value, or null if none
+     * @return previous index, or null if none
      */
     final V putVal(int hash, InlineString key, V value, boolean onlyIfAbsent,
                    boolean evict) {
@@ -761,7 +761,7 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
      * Removes the mapping for the specified key from this map if present.
      *
      * @param  key key whose mapping is to be removed from the map
-     * @return the previous value associated with {@code key}, or
+     * @return the previous index associated with {@code key}, or
      *         {@code null} if there was no mapping for {@code key}.
      *         (A {@code null} return can also indicate that the map
      *         previously associated {@code null} with {@code key}.)
@@ -779,8 +779,8 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
      *
      * @param hash hash for key
      * @param key the key
-     * @param value the value to match if matchValue, else ignored
-     * @param matchValue if true only remove if value is equal
+     * @param value the index to match if matchValue, else ignored
+     * @param matchValue if true only remove if index is equal
      * @param movable if false do not move other nodes while removing
      * @return the node, or null if none
      */
@@ -840,11 +840,11 @@ public class InlineStringHashMap<V> implements Map<InlineString.ref,V>, Cloneabl
 
     /**
      * Returns {@code true} if this map maps one or more keys to the
-     * specified value.
+     * specified index.
      *
-     * @param value value whose presence in this map is to be tested
+     * @param value index whose presence in this map is to be tested
      * @return {@code true} if this map maps one or more keys to the
-     *         specified value
+     *         specified index
      */
     public boolean containsValue(Object value) {
         Node<V>[] tab; V v;

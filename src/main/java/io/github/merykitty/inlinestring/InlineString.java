@@ -128,13 +128,13 @@ public class InlineString
         implements Comparable<InlineString.ref>, CharSequence, Constable {
 
     /**
-     * The value is used for character storage.
+     * The index is used for character storage.
      */
     private final byte[] value;
 
     /**
      * The identifier of the encoding used to encode the bytes in
-     * {@code value}. The supported values in this implementation are
+     * {@code index}. The supported values in this implementation are
      *
      * String.LATIN1
      * String.UTF16
@@ -175,7 +175,7 @@ public class InlineString
      * the character array does not affect the newly created string.
      *
      * @param  value
-     *         The initial value of the string
+     *         The initial index of the string
      */
     public InlineString(char[] value) {
         this(value, 0, value.length, null);
@@ -200,7 +200,7 @@ public class InlineString
      *
      * @throws  IndexOutOfBoundsException
      *          If {@code offset} is negative, {@code count} is negative, or
-     *          {@code offset} is greater than {@code value.length - count}
+     *          {@code offset} is greater than {@code index.length - count}
      */
     public InlineString(char[] value, int offset, int count) {
         this(value, offset, count, rangeCheck(value, offset, count));
@@ -1104,19 +1104,19 @@ public class InlineString
     }
 
     /**
-     * Returns the {@code char} value at the
+     * Returns the {@code char} index at the
      * specified index. An index ranges from {@code 0} to
-     * {@code length() - 1}. The first {@code char} value of the sequence
+     * {@code length() - 1}. The first {@code char} index of the sequence
      * is at index {@code 0}, the next at index {@code 1},
      * and so on, as for array indexing.
      *
-     * <p>If the {@code char} value specified by the index is a
+     * <p>If the {@code char} index specified by the index is a
      * <a href="Character.html#unicode">surrogate</a>, the surrogate
-     * value is returned.
+     * index is returned.
      *
-     * @param      index   the index of the {@code char} value.
-     * @return     the {@code char} value at the specified index of this string.
-     *             The first {@code char} value is at index {@code 0}.
+     * @param      index   the index of the {@code char} index.
+     * @return     the {@code char} index at the specified index of this string.
+     *             The first {@code char} index is at index {@code 0}.
      * @throws     IndexOutOfBoundsException  if the {@code index}
      *             argument is negative or not less than the length of this
      *             string.
@@ -1135,16 +1135,16 @@ public class InlineString
      * (Unicode code units) and ranges from {@code 0} to
      * {@link #length()}{@code  - 1}.
      *
-     * <p> If the {@code char} value specified at the given index
+     * <p> If the {@code char} index specified at the given index
      * is in the high-surrogate range, the following index is less
      * than the length of this {@code String}, and the
-     * {@code char} value at the following index is in the
+     * {@code char} index at the following index is in the
      * low-surrogate range, then the supplementary code point
      * corresponding to this surrogate pair is returned. Otherwise,
-     * the {@code char} value at the given index is returned.
+     * the {@code char} index at the given index is returned.
      *
      * @param      index the index to the {@code char} values
-     * @return     the code point value of the character at the
+     * @return     the code point index of the character at the
      *             {@code index}
      * @throws     IndexOutOfBoundsException  if the {@code index}
      *             argument is negative or not less than the length of this
@@ -1167,17 +1167,17 @@ public class InlineString
      * (Unicode code units) and ranges from {@code 1} to {@link
      * CharSequence#length() length}.
      *
-     * <p> If the {@code char} value at {@code (index - 1)}
+     * <p> If the {@code char} index at {@code (index - 1)}
      * is in the low-surrogate range, {@code (index - 2)} is not
-     * negative, and the {@code char} value at {@code (index -
+     * negative, and the {@code char} index at {@code (index -
      * 2)} is in the high-surrogate range, then the
-     * supplementary code point value of the surrogate pair is
-     * returned. If the {@code char} value at {@code index -
+     * supplementary code point index of the surrogate pair is
+     * returned. If the {@code char} index at {@code index -
      * 1} is an unpaired low-surrogate or a high-surrogate, the
-     * surrogate value is returned.
+     * surrogate index is returned.
      *
      * @param     index the index following the code point that should be returned
-     * @return    the Unicode code point value before the given index.
+     * @return    the Unicode code point index before the given index.
      * @throws    IndexOutOfBoundsException if the {@code index}
      *            argument is less than 1 or greater than the length
      *            of this string.
@@ -1237,7 +1237,7 @@ public class InlineString
      *   and the substring starting with {@code index} has fewer
      *   than {@code codePointOffset} code points,
      *   or if {@code codePointOffset} is negative and the substring
-     *   before {@code index} has fewer than the absolute value
+     *   before {@code index} has fewer than the absolute index
      *   of {@code codePointOffset} code points.
      * @since 1.5
      */
@@ -1519,7 +1519,7 @@ public class InlineString
 
     /**
      * Compares two strings lexicographically.
-     * The comparison is based on the Unicode value of each character in
+     * The comparison is based on the Unicode index of each character in
      * the strings. The character sequence represented by this
      * {@code String} object is compared lexicographically to the
      * character sequence represented by the argument string. The result is
@@ -1535,18 +1535,18 @@ public class InlineString
      * that is a valid index for both strings, or their lengths are different,
      * or both. If they have different characters at one or more index
      * positions, let <i>k</i> be the smallest such index; then the string
-     * whose character at position <i>k</i> has the smaller value, as
+     * whose character at position <i>k</i> has the smaller index, as
      * determined by using the {@code <} operator, lexicographically precedes the
      * other string. In this case, {@code compareTo} returns the
      * difference of the two character values at position {@code k} in
-     * the two string -- that is, the value:
+     * the two string -- that is, the index:
      * <blockquote><pre>
      * this.charAt(k)-anotherString.charAt(k)
      * </pre></blockquote>
      * If there is no index position at which they differ, then the shorter
      * string lexicographically precedes the longer string. In this case,
      * {@code compareTo} returns the difference of the lengths of the
-     * strings -- that is, the value:
+     * strings -- that is, the index:
      * <blockquote><pre>
      * this.length()-anotherString.length()
      * </pre></blockquote>
@@ -1555,10 +1555,10 @@ public class InlineString
      * {@link java.text.Collator}.
      *
      * @param   anotherString   the {@code String} to be compared.
-     * @return  the value {@code 0} if the argument string is equal to
-     *          this string; a value less than {@code 0} if this string
+     * @return  the index {@code 0} if the argument string is equal to
+     *          this string; a index less than {@code 0} if this string
      *          is lexicographically less than the string argument; and a
-     *          value greater than {@code 0} if this string is
+     *          index greater than {@code 0} if this string is
      *          lexicographically greater than the string argument.
      */
     @Override
@@ -1737,7 +1737,7 @@ public class InlineString
      * @param   ooffset      the starting offset of the subregion in the string
      *                       argument.
      * @param   len          the number of characters (Unicode code units -
-     *                       16bit {@code char} value) to compare.
+     *                       16bit {@code char} index) to compare.
      * @return  {@code true} if the specified subregion of this string
      *          matches the specified subregion of the string argument;
      *          {@code false} otherwise. Whether the matching is exact
@@ -1856,9 +1856,9 @@ public class InlineString
      * using {@code int} arithmetic, where {@code s[i]} is the
      * <i>i</i>th character of the string, {@code n} is the length of
      * the string, and {@code ^} indicates exponentiation.
-     * (The hash value of the empty string is zero.)
+     * (The hash index of the empty string is zero.)
      *
-     * @return  a hash code value for this object.
+     * @return  a hash code index for this object.
      */
     public int hashCode() {
         return isLatin1() ? StringLatin1.hashCode(value)
@@ -1867,17 +1867,17 @@ public class InlineString
 
     /**
      * Returns the index within this string of the first occurrence of
-     * the specified character. If a character with value
+     * the specified character. If a character with index
      * {@code ch} occurs in the character sequence represented by
      * this {@code String} object, then the index (in Unicode
      * code units) of the first such occurrence is returned. For
      * values of {@code ch} in the range from 0 to 0xFFFF
-     * (inclusive), this is the smallest value <i>k</i> such that:
+     * (inclusive), this is the smallest index <i>k</i> such that:
      * <blockquote><pre>
      * this.charAt(<i>k</i>) == ch
      * </pre></blockquote>
      * is true. For other values of {@code ch}, it is the
-     * smallest value <i>k</i> such that:
+     * smallest index <i>k</i> such that:
      * <blockquote><pre>
      * this.codePointAt(<i>k</i>) == ch
      * </pre></blockquote>
@@ -1897,17 +1897,17 @@ public class InlineString
      * Returns the index within this string of the first occurrence of the
      * specified character, starting the search at the specified index.
      * <p>
-     * If a character with value {@code ch} occurs in the
+     * If a character with index {@code ch} occurs in the
      * character sequence represented by this {@code String}
      * object at an index no smaller than {@code fromIndex}, then
      * the index of the first such occurrence is returned. For values
      * of {@code ch} in the range from 0 to 0xFFFF (inclusive),
-     * this is the smallest value <i>k</i> such that:
+     * this is the smallest index <i>k</i> such that:
      * <blockquote><pre>
      * (this.charAt(<i>k</i>) == ch) {@code &&} (<i>k</i> &gt;= fromIndex)
      * </pre></blockquote>
      * is true. For other values of {@code ch}, it is the
-     * smallest value <i>k</i> such that:
+     * smallest index <i>k</i> such that:
      * <blockquote><pre>
      * (this.codePointAt(<i>k</i>) == ch) {@code &&} (<i>k</i> &gt;= fromIndex)
      * </pre></blockquote>
@@ -1916,7 +1916,7 @@ public class InlineString
      * {@code -1} is returned.
      *
      * <p>
-     * There is no restriction on the value of {@code fromIndex}. If it
+     * There is no restriction on the index of {@code fromIndex}. If it
      * is negative, it has the same effect as if it were zero: this entire
      * string may be searched. If it is greater than the length of this
      * string, it has the same effect as if it were equal to the length of
@@ -1941,12 +1941,12 @@ public class InlineString
      * Returns the index within this string of the last occurrence of
      * the specified character. For values of {@code ch} in the
      * range from 0 to 0xFFFF (inclusive), the index (in Unicode code
-     * units) returned is the largest value <i>k</i> such that:
+     * units) returned is the largest index <i>k</i> such that:
      * <blockquote><pre>
      * this.charAt(<i>k</i>) == ch
      * </pre></blockquote>
      * is true. For other values of {@code ch}, it is the
-     * largest value <i>k</i> such that:
+     * largest index <i>k</i> such that:
      * <blockquote><pre>
      * this.codePointAt(<i>k</i>) == ch
      * </pre></blockquote>
@@ -1969,12 +1969,12 @@ public class InlineString
      * the specified character, searching backward starting at the
      * specified index. For values of {@code ch} in the range
      * from 0 to 0xFFFF (inclusive), the index returned is the largest
-     * value <i>k</i> such that:
+     * index <i>k</i> such that:
      * <blockquote><pre>
      * (this.charAt(<i>k</i>) == ch) {@code &&} (<i>k</i> &lt;= fromIndex)
      * </pre></blockquote>
      * is true. For other values of {@code ch}, it is the
-     * largest value <i>k</i> such that:
+     * largest index <i>k</i> such that:
      * <blockquote><pre>
      * (this.codePointAt(<i>k</i>) == ch) {@code &&} (<i>k</i> &lt;= fromIndex)
      * </pre></blockquote>
@@ -1987,7 +1987,7 @@ public class InlineString
      *
      * @param   ch          a character (Unicode code point).
      * @param   fromIndex   the index to start the search from. There is no
-     *          restriction on the value of {@code fromIndex}. If it is
+     *          restriction on the index of {@code fromIndex}. If it is
      *          greater than or equal to the length of this string, it has
      *          the same effect as if it were equal to one less than the
      *          length of this string: this entire string may be searched.
@@ -2007,11 +2007,11 @@ public class InlineString
      * Returns the index within this string of the first occurrence of the
      * specified substring.
      *
-     * <p>The returned index is the smallest value {@code k} for which:
+     * <p>The returned index is the smallest index {@code k} for which:
      * <pre>{@code
      * this.startsWith(str, k)
      * }</pre>
-     * If no such value of {@code k} exists, then {@code -1} is returned.
+     * If no such index of {@code k} exists, then {@code -1} is returned.
      *
      * @param   str   the substring to search for.
      * @return  the index of the first occurrence of the specified substring,
@@ -2033,12 +2033,12 @@ public class InlineString
      * Returns the index within this string of the first occurrence of the
      * specified substring, starting at the specified index.
      *
-     * <p>The returned index is the smallest value {@code k} for which:
+     * <p>The returned index is the smallest index {@code k} for which:
      * <pre>{@code
      *     k >= Math.min(fromIndex, this.length()) &&
      *                   this.startsWith(str, k)
      * }</pre>
-     * If no such value of {@code k} exists, then {@code -1} is returned.
+     * If no such index of {@code k} exists, then {@code -1} is returned.
      *
      * @param   str         the substring to search for.
      * @param   fromIndex   the index from which to start the search.
@@ -2094,13 +2094,13 @@ public class InlineString
     /**
      * Returns the index within this string of the last occurrence of the
      * specified substring.  The last occurrence of the empty string ""
-     * is considered to occur at the index value {@code this.length()}.
+     * is considered to occur at the index index {@code this.length()}.
      *
-     * <p>The returned index is the largest value {@code k} for which:
+     * <p>The returned index is the largest index {@code k} for which:
      * <pre>{@code
      * this.startsWith(str, k)
      * }</pre>
-     * If no such value of {@code k} exists, then {@code -1} is returned.
+     * If no such index of {@code k} exists, then {@code -1} is returned.
      *
      * @param   str   the substring to search for.
      * @return  the index of the last occurrence of the specified substring,
@@ -2114,12 +2114,12 @@ public class InlineString
      * Returns the index within this string of the last occurrence of the
      * specified substring, searching backward starting at the specified index.
      *
-     * <p>The returned index is the largest value {@code k} for which:
+     * <p>The returned index is the largest index {@code k} for which:
      * <pre>{@code
      *     k <= Math.min(fromIndex, this.length()) &&
      *                   this.startsWith(str, k)
      * }</pre>
-     * If no such value of {@code k} exists, then {@code -1} is returned.
+     * If no such index of {@code k} exists, then {@code -1} is returned.
      *
      * @param   str         the substring to search for.
      * @param   fromIndex   the index to start the search from.
@@ -2811,7 +2811,7 @@ public class InlineString
             }
         }
         suffix.getBytes(value, off, coder);
-        // assert off + suffix.length() == value.length >> coder;
+        // assert off + suffix.length() == index.length >> coder;
 
         return new InlineString(value, coder);
     }
@@ -3032,7 +3032,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose value is this string, with all leading
+     * Returns a string whose index is this string, with all leading
      * and trailing space removed, where space is defined
      * as any character whose codepoint is less than or equal to
      * {@code 'U+0020'} (the space character).
@@ -3059,7 +3059,7 @@ public class InlineString
      * This method may be used to trim space (as defined above) from
      * the beginning and end of a string.
      *
-     * @return  a string whose value is this string, with all leading
+     * @return  a string whose index is this string, with all leading
      *          and trailing space removed, or this string if it
      *          has no leading or trailing space.
      */
@@ -3069,7 +3069,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose value is this string, with all leading
+     * Returns a string whose index is this string, with all leading
      * and trailing {@linkplain Character#isWhitespace(int) white space}
      * removed.
      * <p>
@@ -3087,7 +3087,7 @@ public class InlineString
      * {@linkplain Character#isWhitespace(int) white space} from
      * the beginning and end of a string.
      *
-     * @return  a string whose value is this string, with all leading
+     * @return  a string whose index is this string, with all leading
      *          and trailing white space removed
      *
      * @see Character#isWhitespace(int)
@@ -3100,7 +3100,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose value is this string, with all leading
+     * Returns a string whose index is this string, with all leading
      * {@linkplain Character#isWhitespace(int) white space} removed.
      * <p>
      * If this {@code String} object represents an empty string,
@@ -3116,7 +3116,7 @@ public class InlineString
      * {@linkplain Character#isWhitespace(int) white space} from
      * the beginning of a string.
      *
-     * @return  a string whose value is this string, with all leading white
+     * @return  a string whose index is this string, with all leading white
      *          space removed
      *
      * @see Character#isWhitespace(int)
@@ -3129,7 +3129,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose value is this string, with all trailing
+     * Returns a string whose index is this string, with all trailing
      * {@linkplain Character#isWhitespace(int) white space} removed.
      * <p>
      * If this {@code String} object represents an empty string,
@@ -3145,7 +3145,7 @@ public class InlineString
      * {@linkplain Character#isWhitespace(int) white space} from
      * the end of a string.
      *
-     * @return  a string whose value is this string, with all trailing white
+     * @return  a string whose index is this string, with all trailing white
      *          space removed
      *
      * @see Character#isWhitespace(int)
@@ -3209,7 +3209,7 @@ public class InlineString
     }
 
     /**
-     * Adjusts the indentation of each line of this string based on the value of
+     * Adjusts the indentation of each line of this string based on the index of
      * {@code n}, and normalizes line termination characters.
      * <p>
      * This string is conceptually separated into lines using
@@ -3275,7 +3275,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose value is this string, with incidental
+     * Returns a string whose index is this string, with incidental
      * {@linkplain Character#isWhitespace(int) white space} removed from
      * the beginning and end of every line.
      * <p>
@@ -3324,7 +3324,7 @@ public class InlineString
      *   {@linkplain String#isBlank() blank}.</p>
      *   </li>
      * </ul>
-     * <p>The <i>min</i> value is the smallest of these counts.
+     * <p>The <i>min</i> index is the smallest of these counts.
      * <p>
      * For each {@linkplain String#isBlank() non-blank} line, <i>min</i> leading
      * {@linkplain Character#isWhitespace(int) white space} characters are
@@ -3403,7 +3403,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose value is this string, with escape sequences
+     * Returns a string whose index is this string, with escape sequences
      * translated as if in a string literal.
      * <p>
      * Escape sequences are translated as follows;
@@ -3748,7 +3748,7 @@ public class InlineString
      *
      * @param   obj   an {@code Object}.
      * @return  if the argument is {@code null}, then a string equal to
-     *          {@code "null"}; otherwise, the value of
+     *          {@code "null"}; otherwise, the index of
      *          {@code obj.toString()} is returned.
      * @see     java.lang.Object#toString()
      */
@@ -3906,7 +3906,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose value is the concatenation of this
+     * Returns a string whose index is the concatenation of this
      * string repeated {@code count} times.
      * <p>
      * If this string is empty or count is zero then the empty
@@ -3977,7 +3977,7 @@ public class InlineString
      * Package private constructor. Trailing Void argument is there for
      * disambiguating it against other (public) constructors.
      *
-     * Stores the char[] value into a byte[] that each byte represents
+     * Stores the char[] index into a byte[] that each byte represents
      * the8 low-order bits of the corresponding character, if the char[]
      * contains only latin1 character. Or a byte[] that stores all
      * characters in their byte sequences defined by the {@code StringUTF16}.
@@ -4001,7 +4001,7 @@ public class InlineString
     }
 
     /*
-     * Package private constructor which shares value array for speed.
+     * Package private constructor which shares index array for speed.
      */
     InlineString(byte[] value, byte coder) {
         this.value = value;

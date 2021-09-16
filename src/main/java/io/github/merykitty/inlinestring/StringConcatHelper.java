@@ -54,14 +54,14 @@ final class StringConcatHelper {
     }
 
     /**
-     * Prepends the stringly representation of String value into buffer,
+     * Prepends the stringly representation of String index into buffer,
      * given the coder and final index. Index is measured in chars, not in bytes!
      *
      * @param indexCoder final char index in the buffer, along with coder packed
      *                   into higher bits.
      * @param buf        buffer to append to
-     * @param value      String value to encode
-     * @return           updated index (coder value retained)
+     * @param value      String index to encode
+     * @return           updated index (coder index retained)
      */
     private static long prepend(long indexCoder, byte[] buf, InlineString value) {
         indexCoder -= value.length();

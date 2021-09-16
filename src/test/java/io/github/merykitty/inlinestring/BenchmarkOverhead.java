@@ -18,7 +18,7 @@ public class BenchmarkOverhead {
 
     HashMap<String, Integer> normalMap;
     InlineStringHashMap<Integer> valMap;
-    HashMap<InlineString.ref, Integer> refMap;
+    FastStringMap<Integer> fastMap;
 
     char[][] keys;
     int[] values;
@@ -36,7 +36,7 @@ public class BenchmarkOverhead {
     public void setUp() {
         normalMap = new HashMap<>();
         valMap = new InlineStringHashMap<>();
-        refMap = new HashMap<>();
+        fastMap = new FastStringMap<>();
         keys = new char[1000][10];
         for (int i = 0; i < 1000; i++) {
             for (int j = 0; j < 10; j++) {
@@ -58,7 +58,7 @@ public class BenchmarkOverhead {
         }
 
         for (int i = 0; i < 1000; i++) {
-            refMap.put(new InlineString(keys[i]), values[i]);
+            fastMap.putInline(new InlineString(keys[i]), values[i]);
         }
     }
 
@@ -89,7 +89,7 @@ public class BenchmarkOverhead {
 
     @Benchmark
     public void getRefExist() {
-        stuff = refMap.get(new InlineString(existKey));
+        stuff = fastMap.getInline(new InlineString(existKey));
     }
 
     @Benchmark
@@ -104,7 +104,7 @@ public class BenchmarkOverhead {
 
     @Benchmark
     public void putRef() {
-        refMap.put(new InlineString(putKey), putValue);
+        fastMap.putInline(new InlineString(putKey), putValue);
     }
 
     @Benchmark
