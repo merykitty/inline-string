@@ -13,7 +13,7 @@ import org.openjdk.jmh.annotations.*;
 @Fork(value = 1)
 @Warmup(iterations = 5)
 @Measurement(iterations = 5)
-public class BenchmarkOverhead {
+public class HashMapBenchmark {
     Random random = new Random();
 
     HashMap<String, Integer> normalMap;
@@ -87,7 +87,6 @@ public class BenchmarkOverhead {
         stuff = valMap.getPrimitive(new InlineString(existKey));
     }
 
-    @Benchmark
     public void getRefExist() {
         stuff = fastMap.getInline(new InlineString(existKey));
     }
@@ -102,7 +101,6 @@ public class BenchmarkOverhead {
         valMap.putPrimitive(new InlineString(putKey), putValue);
     }
 
-    @Benchmark
     public void putRef() {
         fastMap.putInline(new InlineString(putKey), putValue);
     }
@@ -123,9 +121,5 @@ public class BenchmarkOverhead {
 
     public boolean valNonExist() {
         return valMap.getPrimitive(new InlineString(nonExistKey)) == null;
-    }
-
-    public static void main(String[] args) throws IOException {
-        org.openjdk.jmh.Main.main(args);
     }
 }

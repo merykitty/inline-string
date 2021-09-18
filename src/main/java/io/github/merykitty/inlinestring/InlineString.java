@@ -28,6 +28,7 @@ package io.github.merykitty.inlinestring;
 import java.io.UnsupportedEncodingException;
 import java.lang.constant.Constable;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.CharBuffer;
 import java.nio.charset.*;
 import java.util.Arrays;
@@ -47,6 +48,7 @@ import io.github.merykitty.inlinestring.internal.ArrayDecoders;
 import io.github.merykitty.inlinestring.internal.ArrayEncoders;
 import io.github.merykitty.inlinestring.internal.StringCoding;
 import io.github.merykitty.inlinestring.internal.Utils;
+import jdk.incubator.vector.*;
 
 /**
  * The {@code String} class represents character strings. All
@@ -117,7 +119,6 @@ import io.github.merykitty.inlinestring.internal.Utils;
  * @author  Martin Buchholz
  * @author  Ulf Zibis
  * @see     java.lang.Object#toString()
- * @see     java.lang.StringBuffer
  * @see     java.lang.StringBuilder
  * @see     java.nio.charset.Charset
  * @since   1.0
@@ -127,49 +128,64 @@ import io.github.merykitty.inlinestring.internal.Utils;
 public class InlineString
         implements Comparable<InlineString.ref>, CharSequence, Constable {
 
+    private static final byte[] SMALL_STRING_VALUE = new byte[0];
+    private static final int OPTIMISE_THRESHOLD = 16;
+
     /**
      * The index is used for character storage.
      */
     private final byte[] value;
 
     /**
+     * The length of the string
+     */
+    private final int length;
+
+    /**
      * The identifier of the encoding used to encode the bytes in
-     * {@code index}. The supported values in this implementation are
+     * {@code value}. The supported values in this implementation are
      *
      * String.LATIN1
      * String.UTF16
+     *
+     * If the string is optimisable, this field contains the first half of the
+     * value
      */
-    private final byte coder;
+    private final long firstHalf;
+
+    /**
+     * If the string is optimisable, this field contains the second half of the
+     * value
+     */
+    private final long secondHalf;
 
     static final InlineString EMPTY_STRING = new InlineString(Utils.stringValue(""), Utils.stringCoder(""));
 
     /**
-     * Initializes a newly created {@code String} object so that it represents
-     * an empty character sequence.  Note that use of this constructor is
-     * unnecessary since Strings are immutable.
+     * Initializes an {@code InlineString} object so that it represents
+     * an empty character sequence. The result is the same as the one received
+     * by calling {@code new InlineString("")}.
      */
     public InlineString() {
         this.value = EMPTY_STRING.value;
-        this.coder = EMPTY_STRING.coder;
+        this.length = EMPTY_STRING.length;
+        this.firstHalf = EMPTY_STRING.firstHalf;
+        this.secondHalf = EMPTY_STRING.secondHalf;
     }
 
     /**
-     * Initializes a newly created {@code String} object so that it represents
-     * the same sequence of characters as the argument; in other words, the
-     * newly created string is a copy of the argument string. Unless an
-     * explicit copy of {@code original} is needed, use of this constructor is
-     * unnecessary since Strings are immutable.
+     * Initializes an {@code InlineString} object so that it represents
+     * the same sequence of characters as a {@code String} object.
      *
      * @param  original
      *         A {@code String}
      */
     public InlineString(String original) {
-        this.value = Utils.stringValue(original);
-        this.coder = Utils.stringCoder(original);
+        this(Utils.stringValue(original), Utils.stringCoder(original));
     }
 
     /**
-     * Allocates a new {@code String} so that it represents the sequence of
+     * Initializes an {@code InlineString} so that it represents the sequence of
      * characters currently contained in the character array argument. The
      * contents of the character array are copied; subsequent modification of
      * the character array does not affect the newly created string.
@@ -243,19 +259,35 @@ public class InlineString
         checkBoundsOffCount(offset, count, codePoints.length);
         if (count == 0) {
             this.value = EMPTY_STRING.value;
-            this.coder = EMPTY_STRING.coder;
+            this.length = EMPTY_STRING.length;
+            this.firstHalf = EMPTY_STRING.firstHalf;
+            this.secondHalf = EMPTY_STRING.secondHalf;
             return;
         }
         if (Utils.COMPACT_STRINGS) {
             byte[] val = StringLatin1.toBytes(codePoints, offset, count);
             if (val != null) {
-                this.coder = Utils.LATIN1;
-                this.value = val;
-                return;
+                if (optimisable(val.length)) {
+                    var compressedValue = compress(val);
+                    this.value = SMALL_STRING_VALUE;
+                    this.length = val.length;
+                    this.firstHalf = compressedValue.firstHalf();
+                    this.secondHalf = compressedValue.secondHalf();
+                    return;
+                } else {
+                    this.value = val;
+                    this.length = val.length;
+                    this.firstHalf = Utils.LATIN1;
+                    this.secondHalf = 0;
+                    return;
+                }
             }
         }
-        this.coder = Utils.UTF16;
         this.value = StringUTF16.toBytes(codePoints, offset, count);
+        this.length = this.value.length;
+        this.firstHalf = Utils.UTF16;
+        this.secondHalf = 0;
+
     }
 
     /**
@@ -331,11 +363,24 @@ public class InlineString
         checkBoundsOffCount(offset, length, bytes.length);
         if (length == 0) {
             this.value = EMPTY_STRING.value;
-            this.coder = EMPTY_STRING.coder;
+            this.length = EMPTY_STRING.length;
+            this.firstHalf = EMPTY_STRING.firstHalf;
+            this.secondHalf = EMPTY_STRING.secondHalf;
         } else if (charset == StandardCharsets.UTF_8) {
             if (Utils.COMPACT_STRINGS && !StringCoding.hasNegatives(bytes, offset, length)) {
-                this.value = Arrays.copyOfRange(bytes, offset, offset + length);
-                this.coder = Utils.LATIN1;
+                if (optimisable(length)) {
+                    var compressedValue = compress(bytes, offset, length);
+                    this.value = SMALL_STRING_VALUE;
+                    this.length = length;
+                    this.firstHalf = compressedValue.firstHalf();
+                    this.secondHalf = compressedValue.secondHalf();
+                } else {
+                    var val = Arrays.copyOfRange(bytes, offset, offset + length);
+                    this.value = val;
+                    this.length = length;
+                    this.firstHalf = Utils.LATIN1;
+                    this.secondHalf = 0;
+                }
             } else {
                 int sl = offset + length;
                 int dp = 0;
@@ -363,11 +408,21 @@ public class InlineString
                         break;
                     }
                     if (offset == sl) {
-                        if (dp != dst.length) {
+                        if (dp != dst.length && !optimisable(dp)) {
                             dst = Arrays.copyOf(dst, dp);
                         }
-                        this.value = dst;
-                        this.coder = Utils.LATIN1;
+                        if (optimisable(dp)) {
+                            var compressedValue = compress(dst, 0, dp);
+                            this.value = SMALL_STRING_VALUE;
+                            this.length = dp;
+                            this.firstHalf = compressedValue.firstHalf();
+                            this.secondHalf = compressedValue.secondHalf();
+                        } else {
+                            this.value = dst;
+                            this.length = dp;
+                            this.firstHalf = Utils.LATIN1;
+                            this.secondHalf = 0;
+                        }
                         return;
                     }
                 }
@@ -383,20 +438,46 @@ public class InlineString
                     dst = Arrays.copyOf(dst, dp << 1);
                 }
                 this.value = dst;
-                this.coder = Utils.UTF16;
+                this.length = dp;
+                this.firstHalf = Utils.UTF16;
+                this.secondHalf = 0;
             }
         } else if (charset == StandardCharsets.ISO_8859_1) {
             if (Utils.COMPACT_STRINGS) {
-                this.value = Arrays.copyOfRange(bytes, offset, offset + length);
-                this.coder = Utils.LATIN1;
+                if (optimisable(length)) {
+                    var compressedValue = compress(bytes, offset, length);
+                    this.value = SMALL_STRING_VALUE;
+                    this.length = length;
+                    this.firstHalf = compressedValue.firstHalf();
+                    this.secondHalf = compressedValue.secondHalf();
+                } else {
+                    var val = Arrays.copyOfRange(bytes, offset, offset + length);
+                    this.value = val;
+                    this.length = length;
+                    this.firstHalf = Utils.LATIN1;
+                    this.secondHalf = 0;
+                }
             } else {
                 this.value = StringLatin1.inflate(bytes, offset, length);
-                this.coder = Utils.UTF16;
+                this.length = length;
+                this.firstHalf = Utils.UTF16;
+                this.secondHalf = 0;
             }
         } else if (charset == StandardCharsets.US_ASCII) {
             if (Utils.COMPACT_STRINGS && !StringCoding.hasNegatives(bytes, offset, length)) {
-                this.value = Arrays.copyOfRange(bytes, offset, offset + length);
-                this.coder = Utils.LATIN1;
+                if (optimisable(length)) {
+                    var compressedValue = compress(bytes, offset, length);
+                    this.value = SMALL_STRING_VALUE;
+                    this.length = length;
+                    this.firstHalf = compressedValue.firstHalf();
+                    this.secondHalf = compressedValue.secondHalf();
+                } else {
+                    var val = Arrays.copyOfRange(bytes, offset, offset + length);
+                    this.value = val;
+                    this.length = length;
+                    this.firstHalf = Utils.LATIN1;
+                    this.secondHalf = 0;
+                }
             } else {
                 byte[] dst = new byte[length << 1];
                 int dp = 0;
@@ -405,7 +486,9 @@ public class InlineString
                     StringUTF16.putChar(dst, dp++, (b >= 0) ? (char) b : REPL);
                 }
                 this.value = dst;
-                this.coder = Utils.UTF16;
+                this.length = length;
+                this.firstHalf = Utils.UTF16;
+                this.secondHalf = 0;
             }
         } else {
             // (1)We never cache the "external" cs, the only benefit of creating
@@ -422,12 +505,25 @@ public class InlineString
                 // ascii
                 if (ArrayDecoders.isAsciiCompatible(cd) && !StringCoding.hasNegatives(bytes, offset, length)) {
                     if (Utils.COMPACT_STRINGS) {
-                        this.value = Arrays.copyOfRange(bytes, offset, offset + length);
-                        this.coder = Utils.LATIN1;
+                        if (optimisable(length)) {
+                            var compressedValue = compress(bytes, offset, length);
+                            this.value = SMALL_STRING_VALUE;
+                            this.length = length;
+                            this.firstHalf = compressedValue.firstHalf();
+                            this.secondHalf = compressedValue.secondHalf();
+                        } else {
+                            var val = Arrays.copyOfRange(bytes, offset, offset + length);
+                            this.value = val;
+                            this.length = length;
+                            this.firstHalf = Utils.LATIN1;
+                            this.secondHalf = 0;
+                        }
                         return;
                     }
                     this.value = StringLatin1.inflate(bytes, offset, length);
-                    this.coder = Utils.UTF16;
+                    this.length = length;
+                    this.firstHalf = Utils.UTF16;
+                    this.secondHalf = 0;
                     return;
                 }
 
@@ -435,8 +531,18 @@ public class InlineString
                 if (Utils.COMPACT_STRINGS && ArrayDecoders.isLatin1Decodable(cd)) {
                     byte[] dst = new byte[length];
                     ArrayDecoders.decodeToLatin1(cd, bytes, offset, length, dst);
-                    this.value = dst;
-                    this.coder = Utils.LATIN1;
+                    if (optimisable(length)) {
+                        var compressedValue = compress(dst, 0, length);
+                        this.value = SMALL_STRING_VALUE;
+                        this.length = length;
+                        this.firstHalf = compressedValue.firstHalf();
+                        this.secondHalf = compressedValue.secondHalf();
+                    } else {
+                        this.value = dst;
+                        this.length = length;
+                        this.firstHalf = Utils.LATIN1;
+                        this.secondHalf = 0;
+                    }
                     return;
                 }
 
@@ -448,13 +554,25 @@ public class InlineString
                 if (Utils.COMPACT_STRINGS) {
                     byte[] bs = StringUTF16.compress(ca, 0, clen);
                     if (bs != null) {
-                        value = bs;
-                        coder = Utils.LATIN1;
+                        if (optimisable(clen)) {
+                            var compressedValue = compress(bs, 0, clen);
+                            this.value = SMALL_STRING_VALUE;
+                            this.length = clen;
+                            this.firstHalf = compressedValue.firstHalf();
+                            this.secondHalf = compressedValue.secondHalf();
+                        } else {
+                            this.value = bs;
+                            this.length = clen;
+                            this.firstHalf = Utils.LATIN1;
+                            this.secondHalf = 0;
+                        }
                         return;
                     }
                 }
-                coder = Utils.UTF16;
-                value = StringUTF16.toBytes(ca, 0, clen);
+                this.value = StringUTF16.toBytes(ca, 0, clen);
+                this.length = clen;
+                this.firstHalf = Utils.UTF16;
+                this.secondHalf = 0;
                 return;
             }
 
@@ -474,13 +592,25 @@ public class InlineString
             if (Utils.COMPACT_STRINGS) {
                 byte[] bs = StringUTF16.compress(ca, 0, caLen);
                 if (bs != null) {
-                    value = bs;
-                    coder = Utils.LATIN1;
+                    if (optimisable(caLen)) {
+                        var compressedValue = compress(bs, 0, caLen);
+                        this.value = SMALL_STRING_VALUE;
+                        this.length = caLen;
+                        this.firstHalf = compressedValue.firstHalf();
+                        this.secondHalf = compressedValue.secondHalf();
+                    } else {
+                        this.value = bs;
+                        this.length = caLen;
+                        this.firstHalf = Utils.LATIN1;
+                        this.secondHalf = 0;
+                    }
                     return;
                 }
             }
-            coder = Utils.UTF16;
-            value = StringUTF16.toBytes(ca, 0, caLen);
+            this.value = StringUTF16.toBytes(ca, 0, caLen);
+            this.length = caLen;
+            this.firstHalf = Utils.UTF16;
+            this.secondHalf = 0;
         }
     }
 
@@ -1087,7 +1217,7 @@ public class InlineString
      *          object.
      */
     public int length() {
-        return value.length >> coder();
+        return length;
     }
 
     /**
@@ -1100,7 +1230,7 @@ public class InlineString
      */
     @Override
     public boolean isEmpty() {
-        return value.length == 0;
+        return length() == 0;
     }
 
     /**
@@ -1123,7 +1253,16 @@ public class InlineString
      */
     public char charAt(int index) {
         if (isLatin1()) {
-            return StringLatin1.charAt(value, index);
+            if (isOptimised()) {
+                checkIndex(index, length());
+                if (index < 8) {
+                    return (char)(firstHalf << (index * 8) >>> (7 * 8));
+                } else {
+                    return (char)(secondHalf << ((index - 8) * 8) >>> (7 * 8));
+                }
+            } else {
+                return StringLatin1.charAt(value, index);
+            }
         } else {
             return StringUTF16.charAt(value, index);
         }
@@ -1152,13 +1291,21 @@ public class InlineString
      * @since      1.5
      */
     public int codePointAt(int index) {
+        checkIndex(index, length());
         if (isLatin1()) {
-            checkIndex(index, value.length);
-            return value[index] & 0xff;
+            if (isOptimised()) {
+                if (index < 8) {
+                    return (int)(firstHalf << (index * 8) >>> (7 * 8));
+                } else {
+                    return (int)(secondHalf << ((index - 8) * 8) >>> (7 * 8));
+                }
+            } else {
+                return value[index] & 0xff;
+            }
+        } else {
+            int length = value.length >> 1;
+            return StringUTF16.codePointAt(value, index, length);
         }
-        int length = value.length >> 1;
-        checkIndex(index, length);
-        return StringUTF16.codePointAt(value, index, length);
     }
 
     /**
@@ -1187,9 +1334,18 @@ public class InlineString
         int i = index - 1;
         checkIndex(i, length());
         if (isLatin1()) {
-            return (value[i] & 0xff);
+            if (isOptimised()) {
+                if (i < 8) {
+                    return (char)(firstHalf << (i * 8) >>> (7 * 8));
+                } else {
+                    return (char)(secondHalf << ((i - 8) * 8) >>> (7 * 8));
+                }
+            } else {
+                return (value[i] & 0xff);
+            }
+        } else {
+            return StringUTF16.codePointBefore(value, index);
         }
-        return StringUTF16.codePointBefore(value, index);
     }
 
     /**
@@ -1217,8 +1373,9 @@ public class InlineString
         Objects.checkFromToIndex(beginIndex, endIndex, length());
         if (isLatin1()) {
             return endIndex - beginIndex;
+        } else {
+            return StringUTF16.codePointCount(value, beginIndex, endIndex);
         }
-        return StringUTF16.codePointCount(value, beginIndex, endIndex);
     }
 
     /**
@@ -1282,7 +1439,40 @@ public class InlineString
         checkBoundsBeginEnd(srcBegin, srcEnd, length());
         checkBoundsOffCount(dstBegin, srcEnd - srcBegin, dst.length);
         if (isLatin1()) {
-            StringLatin1.getChars(value, srcBegin, srcEnd, dst, dstBegin);
+            if (isOptimised()) {
+                int len = srcEnd - srcBegin;
+                var longSpecies = LongVector.SPECIES_PREFERRED;
+                var byteSpecies = ByteVector.SPECIES_PREFERRED;
+                var charSpecies = ShortVector.SPECIES_PREFERRED;
+                var dataAsLongs = LongVector.broadcast(longSpecies, 0)
+                        .withLane(0, firstHalf)
+                        .withLane(1, secondHalf);
+                var data = dataAsLongs.reinterpretAsBytes();
+                // rotate the vector backward to have srcBegin at the beginning
+                data = data.rearrange(VectorShuffle.iota(byteSpecies, srcBegin, 1, true));
+                var zero = ByteVector.broadcast(byteSpecies, 0);
+                // inflate by zipping the vector with vector 0, the order of the zip depends on the native byte order
+                if (charSpecies.length() >= OPTIMISE_THRESHOLD || charSpecies.length() >= len) {
+                    // if the vector can hold the whole inflated array
+                    var shuffle = VectorShuffle.makeZip(byteSpecies, 0);
+                    var inflated = data.rearrange(shuffle, data);
+                    var result = inflated.reinterpretAsShorts();
+                    var mask = charSpecies.indexInRange(0, len);
+                    result.intoCharArray(dst, dstBegin, mask);
+                } else {
+                    var firstHalfShuffle = VectorShuffle.makeZip(byteSpecies, 0);
+                    var secondHalfShuffle = VectorShuffle.makeZip(byteSpecies, 1);
+                    var inflatedFirst = data.rearrange(firstHalfShuffle, zero);
+                    var inflatedSecond = data.rearrange(secondHalfShuffle, zero);
+                    var resultFirst = inflatedFirst.reinterpretAsShorts();
+                    var resultSecond = inflatedSecond.reinterpretAsShorts();
+                    var mask = charSpecies.indexInRange(0, len - charSpecies.length());
+                    resultFirst.intoCharArray(dst, dstBegin);
+                    resultSecond.intoCharArray(dst, dstBegin + charSpecies.length(), mask);
+                }
+            } else {
+                StringLatin1.getChars(value, srcBegin, srcEnd, dst, dstBegin);
+            }
         } else {
             StringUTF16.getChars(value, srcBegin, srcEnd, dst, dstBegin);
         }
@@ -1311,7 +1501,7 @@ public class InlineString
     public byte[] getBytes(String charsetName)
             throws UnsupportedEncodingException {
         if (charsetName == null) throw new NullPointerException();
-        return encode(lookupCharset(charsetName), coder(), value);
+        return encode(lookupCharset(charsetName), coder(), value());
     }
 
     /**
@@ -1334,7 +1524,7 @@ public class InlineString
      */
     public byte[] getBytes(Charset charset) {
         if (charset == null) throw new NullPointerException();
-        return encode(charset, coder(), value);
+        return encode(charset, coder(), value());
     }
 
     /**
@@ -1351,7 +1541,7 @@ public class InlineString
      * @since      1.1
      */
     public byte[] getBytes() {
-        return encode(Charset.defaultCharset(), coder(), value);
+        return encode(Charset.defaultCharset(), coder(), value());
     }
 
     /**
@@ -1373,8 +1563,13 @@ public class InlineString
      */
     public boolean equals(InlineString aString) {
         if (Utils.COMPACT_STRINGS) {
-            return this.coder == aString.coder
-                    && (this.value == aString.value || StringLatin1.equals(this.value, aString.value));
+            if (isOptimised()) {
+                return this.value == aString.value && this.length == aString.length &&
+                        this.firstHalf == aString.firstHalf && this.secondHalf == aString.secondHalf;
+            } else {
+                return this.coder() == aString.coder()
+                        && StringLatin1.equals(this.value, aString.value);
+            }
         } else {
             return this.value == aString.value || StringLatin1.equals(this.value, aString.value);
         }
@@ -1412,22 +1607,24 @@ public class InlineString
         if (len != sb.length()) {
             return false;
         }
-        byte v1[] = value;
         byte v2[] = Utils.stringBuilderGetValue(sb);
         if (coder() == Utils.stringBuilderGetCoder(sb)) {
-            int n = v1.length;
-            for (int i = 0; i < n; i++) {
-                if (v1[i] != v2[i]) {
-                    return false;
-                }
+            if (isOptimised()) {
+                var byteSpecies = ByteVector.SPECIES_PREFERRED;
+                var mask = byteSpecies.indexInRange(0, len);
+                var sbData = ByteVector.fromArray(byteSpecies, v2, 0, mask);
+                var sbDataAsLongs = sbData.reinterpretAsLongs();
+                return sbDataAsLongs.lane(0) == firstHalf && sbDataAsLongs.lane(1) == secondHalf;
+            } else {
+                return StringLatin1.equals(value, v2);
             }
         } else {
-            if (isLatin1()) {  // utf16 str and latin1 abs can never be "equal"
+            if (isLatin1()) {  // utf16 str and latin1 sb can never be "equal"
                 return false;
+            } else {
+                return StringUTF16.contentEquals(value, v2, len);
             }
-            return StringUTF16.contentEquals(v1, v2, len);
         }
-        return true;
     }
 
     /**
@@ -1467,15 +1664,14 @@ public class InlineString
         if (n != length()) {
             return false;
         }
-        byte[] val = this.value;
         if (isLatin1()) {
             for (int i = 0; i < n; i++) {
-                if ((val[i] & 0xff) != cs.charAt(i)) {
+                if (charAt(i) != cs.charAt(i)) {
                     return false;
                 }
             }
         } else {
-            if (!StringUTF16.contentEquals(val, cs, n)) {
+            if (!StringUTF16.contentEquals(value, cs, n)) {
                 return false;
             }
         }
@@ -1512,7 +1708,7 @@ public class InlineString
      * @see  #codePoints()
      */
     public boolean equalsIgnoreCase(InlineString anotherString) {
-        return (this.value == anotherString.value && this.coder() == anotherString.coder())
+        return (this.value() == anotherString.value() && this.coder() == anotherString.coder())
                 || (anotherString.length() == length()
                         && regionMatches(true, 0, anotherString, 0, length()));
     }
@@ -1563,7 +1759,7 @@ public class InlineString
      */
     @Override
     public int compareTo(InlineString.ref anotherString) {
-        byte v1[] = value;
+        byte v1[] = value();
         byte v2[] = anotherString.value;
         byte coder = coder();
         if (coder == anotherString.coder()) {
@@ -1657,8 +1853,8 @@ public class InlineString
      *          {@code false} otherwise.
      */
     public boolean regionMatches(int toffset, InlineString other, int ooffset, int len) {
-        byte tv[] = value;
-        byte ov[] = other.value;
+        byte tv[] = value();
+        byte ov[] = other.value();
         // Note: toffset, ooffset, or len might be near -1>>>1.
         if ((ooffset < 0) || (toffset < 0) ||
                 (toffset > (long)length() - len) ||
@@ -1756,8 +1952,8 @@ public class InlineString
                 || (ooffset > (long)other.length() - len)) {
             return false;
         }
-        byte tv[] = value;
-        byte ov[] = other.value;
+        byte tv[] = value();
+        byte ov[] = other.value();
         if (coder() == other.coder()) {
             return isLatin1()
                     ? StringLatin1.regionMatchesCI(tv, toffset, ov, ooffset, len)
@@ -1790,8 +1986,8 @@ public class InlineString
         if (toffset < 0 || toffset > length() - prefix.length()) {
             return false;
         }
-        byte ta[] = value;
-        byte pa[] = prefix.value;
+        byte ta[] = value();
+        byte pa[] = prefix.value();
         int po = 0;
         int pc = pa.length;
         if (coder() == prefix.coder()) {
@@ -1861,8 +2057,8 @@ public class InlineString
      * @return  a hash code index for this object.
      */
     public int hashCode() {
-        return isLatin1() ? StringLatin1.hashCode(value)
-                : StringUTF16.hashCode(value);
+        return isLatin1() ? StringLatin1.hashCode(value())
+                : StringUTF16.hashCode(value());
     }
 
     /**
@@ -1933,8 +2129,8 @@ public class InlineString
      *          if the character does not occur.
      */
     public int indexOf(int ch, int fromIndex) {
-        return isLatin1() ? StringLatin1.indexOf(value, ch, fromIndex)
-                : StringUTF16.indexOf(value, ch, fromIndex);
+        return isLatin1() ? StringLatin1.indexOf(value(), ch, fromIndex)
+                : StringUTF16.indexOf(value(), ch, fromIndex);
     }
 
     /**
@@ -1999,8 +2195,8 @@ public class InlineString
      *          if the character does not occur before that point.
      */
     public int lastIndexOf(int ch, int fromIndex) {
-        return isLatin1() ? StringLatin1.lastIndexOf(value, ch, fromIndex)
-                : StringUTF16.lastIndexOf(value, ch, fromIndex);
+        return isLatin1() ? StringLatin1.lastIndexOf(value(), ch, fromIndex)
+                : StringUTF16.lastIndexOf(value(), ch, fromIndex);
     }
 
     /**
@@ -2020,13 +2216,13 @@ public class InlineString
     public int indexOf(InlineString str) {
         byte coder = coder();
         if (coder == str.coder()) {
-            return isLatin1() ? StringLatin1.indexOf(value, str.value)
-                    : StringUTF16.indexOf(value, str.value);
+            return isLatin1() ? StringLatin1.indexOf(value(), str.value())
+                    : StringUTF16.indexOf(value(), str.value());
         }
         if (coder == Utils.LATIN1) {  // str.coder == String.UTF16
             return -1;
         }
-        return StringUTF16.indexOfLatin1(value, str.value);
+        return StringUTF16.indexOfLatin1(value(), str.value());
     }
 
     /**
@@ -2047,7 +2243,7 @@ public class InlineString
      *          or {@code -1} if there is no such occurrence.
      */
     public int indexOf(InlineString str, int fromIndex) {
-        return indexOf(value, coder(), length(), str, fromIndex);
+        return indexOf(value(), coder(), length(), str, fromIndex);
     }
 
     /**
@@ -2063,7 +2259,7 @@ public class InlineString
      */
     static int indexOf(byte[] src, byte srcCoder, int srcCount,
                        InlineString tgtStr, int fromIndex) {
-        byte[] tgt    = tgtStr.value;
+        byte[] tgt    = tgtStr.value();
         byte tgtCoder = tgtStr.coder();
         int tgtCount  = tgtStr.length();
 
@@ -2128,7 +2324,7 @@ public class InlineString
      *          or {@code -1} if there is no such occurrence.
      */
     public int lastIndexOf(InlineString str, int fromIndex) {
-        return lastIndexOf(value, coder(), length(), str, fromIndex);
+        return lastIndexOf(value(), coder(), length(), str, fromIndex);
     }
 
     /**
@@ -2144,7 +2340,7 @@ public class InlineString
      */
     static int lastIndexOf(byte[] src, byte srcCoder, int srcCount,
                            InlineString tgtStr, int fromIndex) {
-        byte[] tgt = tgtStr.value;
+        byte[] tgt = tgtStr.value();
         byte tgtCoder = tgtStr.coder();
         int tgtCount = tgtStr.length();
         /*
@@ -2224,8 +2420,8 @@ public class InlineString
             return this;
         }
         int subLen = endIndex - beginIndex;
-        return isLatin1() ? StringLatin1.newString(value, beginIndex, subLen)
-                : StringUTF16.newString(value, beginIndex, subLen);
+        return isLatin1() ? StringLatin1.newString(value(), beginIndex, subLen)
+                : StringUTF16.newString(value(), beginIndex, subLen);
     }
 
     /**
@@ -2315,8 +2511,8 @@ public class InlineString
      */
     public InlineString replace(char oldChar, char newChar) {
         if (oldChar != newChar) {
-            return isLatin1() ? StringLatin1.replace(value, oldChar, newChar)
-                    : StringUTF16.replace(value, oldChar, newChar);
+            return isLatin1() ? StringLatin1.replace(value(), oldChar, newChar)
+                    : StringUTF16.replace(value(), oldChar, newChar);
         } else {
             return this;
         }
@@ -2480,12 +2676,12 @@ public class InlineString
             boolean trgtIsLatin1 = trgtStr.isLatin1();
             boolean replIsLatin1 = replStr.isLatin1();
             var ret = (thisIsLatin1 && trgtIsLatin1 && replIsLatin1)
-                    ? StringLatin1.replace(value, thisLen,
-                    trgtStr.value, trgtLen,
-                    replStr.value, replLen)
-                    : StringUTF16.replace(value, thisLen, thisIsLatin1,
-                    trgtStr.value, trgtLen, trgtIsLatin1,
-                    replStr.value, replLen, replIsLatin1);
+                    ? StringLatin1.replace(value(), thisLen,
+                    trgtStr.value(), trgtLen,
+                    replStr.value(), replLen)
+                    : StringUTF16.replace(value(), thisLen, thisIsLatin1,
+                    trgtStr.value(), trgtLen, trgtIsLatin1,
+                    replStr.value(), replLen, replIsLatin1);
             return ret;
 
         } else { // trgtLen == 0
@@ -2923,8 +3119,8 @@ public class InlineString
      * @since   1.1
      */
     public InlineString toLowerCase(Locale locale) {
-        return isLatin1() ? StringLatin1.toLowerCase(this, value, locale)
-                : StringUTF16.toLowerCase(this, value, locale);
+        return isLatin1() ? StringLatin1.toLowerCase(this, value(), locale)
+                : StringUTF16.toLowerCase(this, value(), locale);
     }
 
     /**
@@ -3004,8 +3200,8 @@ public class InlineString
      * @since   1.1
      */
     public InlineString toUpperCase(Locale locale) {
-        return isLatin1() ? StringLatin1.toUpperCase(this, value, locale)
-                : StringUTF16.toUpperCase(this, value, locale);
+        return isLatin1() ? StringLatin1.toUpperCase(this, value(), locale)
+                : StringUTF16.toUpperCase(this, value(), locale);
     }
 
     /**
@@ -3064,8 +3260,8 @@ public class InlineString
      *          has no leading or trailing space.
      */
     public InlineString trim() {
-        return isLatin1() ? StringLatin1.trim(value)
-                : StringUTF16.trim(value);
+        return isLatin1() ? StringLatin1.trim(value())
+                : StringUTF16.trim(value());
     }
 
     /**
@@ -3095,8 +3291,8 @@ public class InlineString
      * @since 11
      */
     public InlineString strip() {
-        return isLatin1() ? StringLatin1.strip(value)
-                : StringUTF16.strip(value);
+        return isLatin1() ? StringLatin1.strip(value())
+                : StringUTF16.strip(value());
     }
 
     /**
@@ -3124,8 +3320,8 @@ public class InlineString
      * @since 11
      */
     public InlineString stripLeading() {
-        return isLatin1() ? StringLatin1.stripLeading(value)
-                : StringUTF16.stripLeading(value);
+        return isLatin1() ? StringLatin1.stripLeading(value())
+                : StringUTF16.stripLeading(value());
     }
 
     /**
@@ -3153,8 +3349,8 @@ public class InlineString
      * @since 11
      */
     public InlineString stripTrailing() {
-        return isLatin1() ? StringLatin1.stripTrailing(value)
-                : StringUTF16.stripTrailing(value);
+        return isLatin1() ? StringLatin1.stripTrailing(value())
+                : StringUTF16.stripTrailing(value());
     }
 
     /**
@@ -3205,7 +3401,7 @@ public class InlineString
      * @since 11
      */
     public Stream<InlineString.ref> lines() {
-        return isLatin1() ? StringLatin1.lines(value) : StringUTF16.lines(value);
+        return isLatin1() ? StringLatin1.lines(value()) : StringUTF16.lines(value());
     }
 
     /**
@@ -3265,13 +3461,13 @@ public class InlineString
     }
 
     private int indexOfNonWhitespace() {
-        return isLatin1() ? StringLatin1.indexOfNonWhitespace(value)
-                : StringUTF16.indexOfNonWhitespace(value);
+        return isLatin1() ? StringLatin1.indexOfNonWhitespace(value())
+                : StringUTF16.indexOfNonWhitespace(value());
     }
 
     private int lastIndexOfNonWhitespace() {
-        return isLatin1() ? StringLatin1.lastIndexOfNonWhitespace(value)
-                : StringUTF16.lastIndexOfNonWhitespace(value);
+        return isLatin1() ? StringLatin1.lastIndexOfNonWhitespace(value())
+                : StringUTF16.lastIndexOfNonWhitespace(value());
     }
 
     /**
@@ -3588,7 +3784,7 @@ public class InlineString
      * @return  the string itself.
      */
     public String toString() {
-        return Utils.newStringValueCoder(value, coder);
+        return Utils.newStringValueCoder(value(), coder());
     }
 
     /**
@@ -3603,8 +3799,8 @@ public class InlineString
     @Override
     public IntStream chars() {
         return StreamSupport.intStream(
-                isLatin1() ? StringLatin1.charsSpliterator(value, Spliterator.IMMUTABLE)
-                        : StringUTF16.charsSpliterator(value, Spliterator.IMMUTABLE),
+                isLatin1() ? StringLatin1.charsSpliterator(value(), Spliterator.IMMUTABLE)
+                        : StringUTF16.charsSpliterator(value(), Spliterator.IMMUTABLE),
                 false);
     }
 
@@ -3623,8 +3819,8 @@ public class InlineString
     @Override
     public IntStream codePoints() {
         return StreamSupport.intStream(
-                isLatin1() ? StringLatin1.charsSpliterator(value, Spliterator.IMMUTABLE)
-                        : StringUTF16.codePointsSpliterator(value, Spliterator.IMMUTABLE),
+                isLatin1() ? StringLatin1.charsSpliterator(value(), Spliterator.IMMUTABLE)
+                        : StringUTF16.codePointsSpliterator(value(), Spliterator.IMMUTABLE),
                 false);
     }
 
@@ -3636,8 +3832,8 @@ public class InlineString
      *          the character sequence represented by this string.
      */
     public char[] toCharArray() {
-        return isLatin1() ? StringLatin1.toChars(value)
-                : StringUTF16.toChars(value);
+        return isLatin1() ? StringLatin1.toChars(value())
+                : StringUTF16.toChars(value());
     }
 
     /**
@@ -3930,27 +4126,62 @@ public class InlineString
         if (count == 1) {
             return this;
         }
-        final int len = value.length;
-        if (len == 0 || count == 0) {
+        if (isEmpty() || count == 0) {
             return EMPTY_STRING;
         }
-        if (Integer.MAX_VALUE / count < len) {
+        final int dataLen = isOptimised() ? length : value.length;
+        if (Integer.MAX_VALUE / count < dataLen) {
             throw new OutOfMemoryError("Required length exceeds implementation limit");
         }
-        if (len == 1) {
-            final byte[] single = new byte[count];
-            Arrays.fill(single, value[0]);
-            return new InlineString(single, coder);
+        if (isOptimised()) {
+            int limit = dataLen * count;
+            int maxBatchSize = OPTIMISE_THRESHOLD / dataLen;
+            int batchSize = Math.min(count, maxBatchSize);
+            var byteSpecies = ByteVector.SPECIES_PREFERRED;
+            var longSpecies = LongVector.SPECIES_PREFERRED;
+            var dataAsLongs = LongVector.broadcast(longSpecies, 0)
+                    .withLane(0, firstHalf)
+                    .withLane(1, secondHalf);
+            var data = dataAsLongs.reinterpretAsBytes();
+            var batch = data;
+            if (dataLen == 1) {
+                batch = ByteVector.broadcast(byteSpecies, data.lane(0));
+            } else {
+                var shuffle = VectorShuffle.iota(byteSpecies, -dataLen, 1, true);
+                var temp = data;
+                for (int i = 1; i < batchSize; i++) {
+                    temp = temp.rearrange(shuffle);
+                    batch = batch.or(temp);
+                }
+            }
+            if (batchSize <= count) {
+                var result = data.reinterpretAsLongs();
+                return new InlineString(SMALL_STRING_VALUE, limit, result.lane(0), result.lane(1));
+            } else {
+                int batchDataSize = batchSize * dataLen;
+                var batchMask = byteSpecies.indexInRange(0, batchDataSize);
+                var singleMask = byteSpecies.indexInRange(0, dataLen);
+                final byte[] multiple = new byte[limit];
+                int i = 0;
+                for (; i <= limit - batchDataSize; i += batchDataSize) {
+                    batch.intoArray(multiple, i, batchMask);
+                }
+                for (; i < limit; i += dataLen) {
+                    data.intoArray(multiple, i, singleMask);
+                }
+                return new InlineString(multiple, limit, Utils.LATIN1, 0);
+            }
+        } else {
+            final int limit = dataLen * count;
+            final byte[] multiple = new byte[limit];
+            System.arraycopy(value, 0, multiple, 0, dataLen);
+            int copied = dataLen;
+            for (; copied < limit - copied; copied <<= 1) {
+                System.arraycopy(multiple, 0, multiple, copied, copied);
+            }
+            System.arraycopy(multiple, 0, multiple, copied, limit - copied);
+            return new InlineString(multiple, limit, coder(), 0);
         }
-        final int limit = len * count;
-        final byte[] multiple = new byte[limit];
-        System.arraycopy(value, 0, multiple, 0, len);
-        int copied = len;
-        for (; copied < limit - copied; copied <<= 1) {
-            System.arraycopy(multiple, 0, multiple, copied, copied);
-        }
-        System.arraycopy(multiple, 0, multiple, copied, limit - copied);
-        return new InlineString(multiple, coder);
     }
 
     ////////////////////////////////////////////////////////////////
@@ -3967,9 +4198,18 @@ public class InlineString
      */
     void getBytes(byte[] dst, int dstBegin, byte coder) {
         if (coder() == coder) {
-            System.arraycopy(value, 0, dst, dstBegin << coder, value.length);
+            if (isOptimised()) { // must be LATIN1
+                uncompress(dst, dstBegin, this.length, this.firstHalf, this.secondHalf);
+            } else {
+                System.arraycopy(value, 0, dst, dstBegin << coder, value.length);
+            }
         } else {    // this.coder == LATIN && coder == String.UTF16
-            StringLatin1.inflate(value, 0, dst, dstBegin, value.length);
+            if (isOptimised()) {
+                var val = value();
+                StringLatin1.inflate(val, 0, dst, dstBegin, val.length)
+            } else {
+                StringLatin1.inflate(value, 0, dst, dstBegin, value.length);
+            }
         }
     }
 
@@ -3985,40 +4225,128 @@ public class InlineString
     InlineString(char[] value, int off, int len, Void sig) {
         if (len == 0) {
             this.value = EMPTY_STRING.value;
-            this.coder = EMPTY_STRING.coder;
+            this.length = EMPTY_STRING.length;
+            this.firstHalf = EMPTY_STRING.firstHalf;
+            this.secondHalf = EMPTY_STRING.secondHalf;
             return;
         }
         if (Utils.COMPACT_STRINGS) {
             byte[] val = StringUTF16.compress(value, off, len);
             if (val != null) {
-                this.value = val;
-                this.coder = Utils.LATIN1;
-                return;
+                if (optimisable(len)) {
+                    var compressedValue = compress(val);
+                    this.value = SMALL_STRING_VALUE;
+                    this.length = val.length;
+                    this.firstHalf = compressedValue.firstHalf();
+                    this.secondHalf = compressedValue.secondHalf();
+                    return;
+                } else {
+                    this.value = val;
+                    this.length = val.length;
+                    this.firstHalf = Utils.LATIN1;
+                    this.secondHalf = 0;
+                    return;
+                }
             }
         }
-        this.coder = Utils.UTF16;
         this.value = StringUTF16.toBytes(value, off, len);
+        this.length = this.value.length;
+        this.firstHalf = Utils.UTF16;
+        this.secondHalf = 0;
     }
 
     /*
      * Package private constructor which shares index array for speed.
      */
     InlineString(byte[] value, byte coder) {
-        this.value = value;
-        this.coder = coder;
+        if (optimisable(value.length, coder)) {
+            var compressedValue = compress(value);
+            this.value = SMALL_STRING_VALUE;
+            this.length = value.length;
+            this.firstHalf = compressedValue.firstHalf();
+            this.secondHalf = compressedValue.secondHalf();
+        } else {
+            this.value = value;
+            this.length = value.length;
+            this.firstHalf = coder;
+            this.secondHalf = 0;
+        }
     }
 
-    byte coder() {
-        return Utils.COMPACT_STRINGS ? coder : Utils.UTF16;
+    InlineString(byte[] value, int length, long firstHalf, long secondHalf) {
+        this.value = value;
+        this.length = length;
+        this.firstHalf = firstHalf;
+        this.secondHalf = secondHalf;
     }
 
     byte[] value() {
-        return value;
+        if (!isOptimised()) {
+            return value;
+        } else {
+            return uncompress(length, firstHalf, secondHalf);
+        }
+    }
+
+    byte coder() {
+        if (Utils.COMPACT_STRINGS) {
+            if (isOptimised()) {
+                return Utils.LATIN1;
+            } else {
+                return (byte) firstHalf;
+            }
+        } else {
+            return Utils.UTF16;
+        }
     }
 
     boolean isLatin1() {
-        return Utils.COMPACT_STRINGS && coder == Utils.LATIN1;
+        return Utils.COMPACT_STRINGS && coder() == Utils.LATIN1;
     }
+
+    private boolean isOptimised() {
+        return value == SMALL_STRING_VALUE;
+    }
+
+    private static boolean optimisable(int length, byte coder) {
+        return Utils.COMPACT_STRINGS && coder == Utils.LATIN1 && length <= OPTIMISE_THRESHOLD;
+    }
+
+    private static boolean optimisable(int length) {
+        return optimisable(length, Utils.LATIN1);
+    }
+
+    private static SmallString compress(byte[] value) {
+        return compress(value, 0, value.length);
+    }
+
+    private static SmallString compress(byte[] value, int beginIndex, int length) {
+        var byteSpecies = ByteVector.SPECIES_PREFERRED;
+        var mask = byteSpecies.indexInRange(0,length);
+        var data = ByteVector.fromArray(byteSpecies, value, beginIndex, mask);
+        var dataAsLongs = data.reinterpretAsLongs();
+        return new SmallString(dataAsLongs.lane(0), dataAsLongs.lane(1));
+    }
+
+    private static void uncompress(byte[] dst, int offset, int length, long firstHalf, long secondHalf) {
+        var longSpecies = LongVector.SPECIES_PREFERRED;
+        var byteSpecies = ByteVector.SPECIES_PREFERRED;
+        var mask = byteSpecies.indexInRange(0, length);
+        var dataAsLongs = LongVector.broadcast(longSpecies, 0)
+                .withLane(0, firstHalf)
+                .withLane(1, secondHalf);
+        var data = dataAsLongs.reinterpretAsBytes();
+        data.intoArray(dst, offset, mask);
+    }
+
+    private static byte[] uncompress(int length, long firstHalf, long secondHalf) {
+        byte[] result = new byte[length];
+        uncompress(result, 0, length, firstHalf, secondHalf);
+        return result;
+    }
+
+    @__primitive__
+    private record SmallString(long firstHalf, long secondHalf) {};
 
     /*
      * StringIndexOutOfBoundsException  if {@code index} is
@@ -4062,9 +4390,9 @@ public class InlineString
 
     /**
      * Returns an {@link Optional} containing the nominal descriptor for this
-     * instance, which is the instance itself.
+     * instance, which is a {@link String} with the same content.
      *
-     * @return an {@link Optional} describing the {@linkplain String} instance
+     * @return an {@link Optional} describing the {@linkplain InlineString} instance
      * @since 12
      */
     @Override

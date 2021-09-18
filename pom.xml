@@ -54,7 +54,10 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>${maven-compiler-plugin.version}</version>
                 <configuration>
-
+                    <compilerArgs>
+                        <arg>--add-modules=jdk.incubator.foreign</arg>
+                        <arg>--add-modules=jdk.incubator.vector</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
 
@@ -75,9 +78,14 @@
                             <arguments>
                                 <argument>-cp</argument>
                                 <modulepath/>
+                                <argument>--add-modules=jdk.incubator.foreign</argument>
+                                <argument>--add-modules=jdk.incubator.vector</argument>
                                 <argument>--add-opens</argument>
                                 <argument>java.base/java.lang=ALL-UNNAMED</argument>
-                                <argument>io.github.merykitty.inlinestring.BenchmarkOverhead</argument>
+                                <argument>io.github.merykitty.inlinestring.BenchmarkEntry</argument>
+                                <argument>GCBenchmark</argument>
+                                <argument>-prof</argument>
+                                <argument>gc</argument>
                             </arguments>
                         </configuration>
                     </execution>
