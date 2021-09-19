@@ -1157,9 +1157,17 @@ public class InlineString
             if (isOptimised()) {
                 checkIndex(index, length());
                 if (index < 8) {
-                    return (char)(firstHalf << (index * 8) >>> (7 * 8));
+                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
+                        return (char) (firstHalf << (7 - index) * 8 >>> (7 * 8));
+                    } else {
+                        return (char) (firstHalf << (index * 8) >>> (7 * 8));
+                    }
                 } else {
-                    return (char)(secondHalf << ((index - 8) * 8) >>> (7 * 8));
+                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
+                        return (char) (secondHalf << ((15 - index) * 8) >>> (7 * 8));
+                    } else {
+                        return (char) (secondHalf << ((index - 8) * 8) >>> (7 * 8));
+                    }
                 }
             } else {
                 return StringLatin1.charAt(value, index);
@@ -1196,9 +1204,17 @@ public class InlineString
         if (isLatin1()) {
             if (isOptimised()) {
                 if (index < 8) {
-                    return (int)(firstHalf << (index * 8) >>> (7 * 8));
+                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
+                        return (int) (firstHalf << (7 - index) * 8 >>> (7 * 8));
+                    } else {
+                        return (int) (firstHalf << (index * 8) >>> (7 * 8));
+                    }
                 } else {
-                    return (int)(secondHalf << ((index - 8) * 8) >>> (7 * 8));
+                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
+                        return (int) (secondHalf << ((15 - index) * 8) >>> (7 * 8));
+                    } else {
+                        return (int) (secondHalf << ((index - 8) * 8) >>> (7 * 8));
+                    }
                 }
             } else {
                 return value[index] & 0xff;
@@ -1236,10 +1252,18 @@ public class InlineString
         checkIndex(i, length());
         if (isLatin1()) {
             if (isOptimised()) {
-                if (i < 8) {
-                    return (char)(firstHalf << (i * 8) >>> (7 * 8));
+                if (index < 8) {
+                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
+                        return (char) (firstHalf << (7 - i) * 8 >>> (7 * 8));
+                    } else {
+                        return (char) (firstHalf << (i * 8) >>> (7 * 8));
+                    }
                 } else {
-                    return (char)(secondHalf << ((i - 8) * 8) >>> (7 * 8));
+                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
+                        return (char) (secondHalf << ((15 - i) * 8) >>> (7 * 8));
+                    } else {
+                        return (char) (secondHalf << ((i - 8) * 8) >>> (7 * 8));
+                    }
                 }
             } else {
                 return (value[i] & 0xff);
@@ -1352,11 +1376,11 @@ public class InlineString
                 // rotate the vector backward to have srcBegin at the beginning
                 data = data.rearrange(VectorShuffle.iota(byteSpecies, srcBegin, 1, true));
                 var zero = ByteVector.broadcast(byteSpecies, 0);
-                // inflate by zipping the vector with vector 0, the order of the zip depends on the native byte order
+                // inflate by zipping the vector with vector 0
                 if (charSpecies.length() >= OPTIMISE_THRESHOLD || charSpecies.length() >= len) {
                     // if the vector can hold the whole inflated array
                     var shuffle = VectorShuffle.makeZip(byteSpecies, 0);
-                    var inflated = data.rearrange(shuffle, data);
+                    var inflated = data.rearrange(shuffle, zero);
                     var result = inflated.reinterpretAsShorts();
                     var mask = charSpecies.indexInRange(0, len);
                     result.intoCharArray(dst, dstBegin, mask);
@@ -1661,7 +1685,7 @@ public class InlineString
     @Override
     public int compareTo(InlineString.ref anotherString) {
         byte v1[] = value();
-        byte v2[] = anotherString.value;
+        byte v2[] = anotherString.value();
         byte coder = coder();
         if (coder == anotherString.coder()) {
             return isLatin1() ? StringLatin1.compareTo(v1, v2)
@@ -1684,8 +1708,8 @@ public class InlineString
      */
     public static final Comparator<InlineString.ref> CASE_INSENSITIVE_ORDER
             = (s1, s2) -> {
-        byte v1[] = s1.value;
-        byte v2[] = s2.value;
+        byte v1[] = s1.value();
+        byte v2[] = s2.value();
         if (s1.coder() == s2.coder()) {
             return s1.isLatin1() ? StringLatin1.compareToCI(v1, v2)
                     : StringUTF16.compareToCI(v1, v2);
@@ -2577,12 +2601,12 @@ public class InlineString
             boolean trgtIsLatin1 = trgtStr.isLatin1();
             boolean replIsLatin1 = replStr.isLatin1();
             var ret = (thisIsLatin1 && trgtIsLatin1 && replIsLatin1)
-                    ? StringLatin1.replace(value, thisLen,
-                            trgtStr.value, trgtLen,
-                            replStr.value, replLen)
-                    : StringUTF16.replace(value, thisLen, thisIsLatin1,
-                            trgtStr.value, trgtLen, trgtIsLatin1,
-                            replStr.value, replLen, replIsLatin1);
+                    ? StringLatin1.replace(value(), thisLen,
+                            trgtStr.value(), trgtLen,
+                            replStr.value(), replLen)
+                    : StringUTF16.replace(value(), thisLen, thisIsLatin1,
+                            trgtStr.value(), trgtLen, trgtIsLatin1,
+                            replStr.value(), replLen, replIsLatin1);
             return ret;
 
         } else { // trgtLen == 0
@@ -4168,7 +4192,7 @@ public class InlineString
             this.secondHalf = compressedValue.secondHalf();
         } else {
             this.value = value;
-            this.length = value.length;
+            this.length = value.length >>> coder;
             this.firstHalf = coder;
             this.secondHalf = 0;
         }
