@@ -382,9 +382,10 @@ final class StringUTF16 {
         //  | 7 |  UTF16 |  UTF16 |  UTF16 | null or UTF16         |
         //  +---+--------+--------+--------+-----------------------+
 
+        byte coder = valLat1 ? Utils.LATIN1 : Utils.UTF16;
         if (Utils.COMPACT_STRINGS && valLat1 && !targLat1) {
             // combinations 2 or 3
-            return new InlineString(value, Utils.UTF16); // for string to return this;
+            return new InlineString(value, coder); // for string to return this;
         }
 
         int i = (Utils.COMPACT_STRINGS && valLat1)
@@ -393,7 +394,7 @@ final class StringUTF16 {
                         ? indexOfLatin1(value, targ)
                         : indexOf(value, targ);
         if (i < 0) {
-            return new InlineString(value, Utils.UTF16); // for string to return this;
+            return new InlineString(value, coder); // for string to return this;
         }
 
         // find and store indices of substrings to replace
@@ -877,9 +878,11 @@ final class StringUTF16 {
                     Byte.TYPE.arrayType(), Integer.TYPE, Byte.TYPE.arrayType(), Integer.TYPE, Integer.TYPE));
             var charsSpliteratorClass = lookup.findClass("java.lang.StringUTF16$CharsSpliterator");
             CHARS_SPLITERATOR = lookup.findConstructor(charsSpliteratorClass, methodType(Void.TYPE,
+                    Byte.TYPE.arrayType(), Integer.TYPE)).asType(methodType(Spliterator.OfInt.class,
                     Byte.TYPE.arrayType(), Integer.TYPE));
             var codePointsSpliteratorClass = lookup.findClass("java.lang.StringUTF16$CodePointsSpliterator");
             CODE_POINTS_SPLITERATOR = lookup.findConstructor(codePointsSpliteratorClass, methodType(Void.TYPE,
+                    Byte.TYPE.arrayType(), Integer.TYPE)).asType(methodType(Spliterator.OfInt.class,
                     Byte.TYPE.arrayType(), Integer.TYPE));
         } catch (Exception e) {
             throw new AssertionError(e);
