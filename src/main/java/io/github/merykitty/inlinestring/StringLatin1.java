@@ -632,6 +632,7 @@ final class StringLatin1 {
                     Byte.TYPE.arrayType(), Integer.TYPE, Byte.TYPE.arrayType(), Integer.TYPE, Integer.TYPE));
             var charsSpliteratorClass = lookup.findClass("java.lang.StringLatin1$CharsSpliterator");
             CHARS_SPLITERATOR = lookup.findConstructor(charsSpliteratorClass, methodType(Void.TYPE,
+                    Byte.TYPE.arrayType(), Integer.TYPE)).asType(methodType(Spliterator.OfInt.class,
                     Byte.TYPE.arrayType(), Integer.TYPE));
         } catch (Exception e) {
             throw new AssertionError(e);

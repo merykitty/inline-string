@@ -44,8 +44,6 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.*;
 
-import io.github.merykitty.inlinestring.internal.ArrayDecoders;
-import io.github.merykitty.inlinestring.internal.ArrayEncoders;
 import io.github.merykitty.inlinestring.internal.StringCoding;
 import io.github.merykitty.inlinestring.internal.Utils;
 import jdk.incubator.vector.*;
@@ -500,81 +498,6 @@ public class InlineString
             // impact, as well as the outgoing result byte/char[]. Need to do the
             // optimization check of (sm==null && classLoader0==null) for both.
             CharsetDecoder cd = charset.newDecoder();
-            // ArrayDecoder fastpaths
-            if (ArrayDecoders.isInstance(cd)) {
-                // ascii
-                if (ArrayDecoders.isAsciiCompatible(cd) && !StringCoding.hasNegatives(bytes, offset, length)) {
-                    if (Utils.COMPACT_STRINGS) {
-                        if (optimisable(length)) {
-                            var compressedValue = compress(bytes, offset, length);
-                            this.value = SMALL_STRING_VALUE;
-                            this.length = length;
-                            this.firstHalf = compressedValue.firstHalf();
-                            this.secondHalf = compressedValue.secondHalf();
-                        } else {
-                            var val = Arrays.copyOfRange(bytes, offset, offset + length);
-                            this.value = val;
-                            this.length = length;
-                            this.firstHalf = Utils.LATIN1;
-                            this.secondHalf = 0;
-                        }
-                        return;
-                    }
-                    this.value = StringLatin1.inflate(bytes, offset, length);
-                    this.length = length;
-                    this.firstHalf = Utils.UTF16;
-                    this.secondHalf = 0;
-                    return;
-                }
-
-                // fastpath for always Latin1 decodable single byte
-                if (Utils.COMPACT_STRINGS && ArrayDecoders.isLatin1Decodable(cd)) {
-                    byte[] dst = new byte[length];
-                    ArrayDecoders.decodeToLatin1(cd, bytes, offset, length, dst);
-                    if (optimisable(length)) {
-                        var compressedValue = compress(dst, 0, length);
-                        this.value = SMALL_STRING_VALUE;
-                        this.length = length;
-                        this.firstHalf = compressedValue.firstHalf();
-                        this.secondHalf = compressedValue.secondHalf();
-                    } else {
-                        this.value = dst;
-                        this.length = length;
-                        this.firstHalf = Utils.LATIN1;
-                        this.secondHalf = 0;
-                    }
-                    return;
-                }
-
-                int en = scale(length, cd.maxCharsPerByte());
-                cd.onMalformedInput(CodingErrorAction.REPLACE)
-                        .onUnmappableCharacter(CodingErrorAction.REPLACE);
-                char[] ca = new char[en];
-                int clen = ArrayDecoders.decode(cd, bytes, offset, length, ca);
-                if (Utils.COMPACT_STRINGS) {
-                    byte[] bs = StringUTF16.compress(ca, 0, clen);
-                    if (bs != null) {
-                        if (optimisable(clen)) {
-                            var compressedValue = compress(bs, 0, clen);
-                            this.value = SMALL_STRING_VALUE;
-                            this.length = clen;
-                            this.firstHalf = compressedValue.firstHalf();
-                            this.secondHalf = compressedValue.secondHalf();
-                        } else {
-                            this.value = bs;
-                            this.length = clen;
-                            this.firstHalf = Utils.LATIN1;
-                            this.secondHalf = 0;
-                        }
-                        return;
-                    }
-                }
-                this.value = StringUTF16.toBytes(ca, 0, clen);
-                this.length = clen;
-                this.firstHalf = Utils.UTF16;
-                this.secondHalf = 0;
-                return;
-            }
 
             // decode using CharsetDecoder
             int en = scale(length, cd.maxCharsPerByte());
@@ -657,28 +580,6 @@ public class InlineString
         CharsetEncoder ce = cs.newEncoder();
         int len = val.length >> coder;  // assume String.LATIN1=0/String.UTF16=1;
         int en = scale(len, ce.maxBytesPerChar());
-        if (ArrayEncoders.isInstance(ce)) {
-            // fastpath for ascii compatible
-            if (coder == Utils.LATIN1 &&
-                    ArrayEncoders.isAsciiCompatible(ce) &&
-                    !StringCoding.hasNegatives(val, 0, val.length)) {
-                return Arrays.copyOf(val, val.length);
-            }
-            byte[] ba = new byte[en];
-            if (len == 0) {
-                return ba;
-            }
-            if (doReplace) {
-                ce.onMalformedInput(CodingErrorAction.REPLACE)
-                        .onUnmappableCharacter(CodingErrorAction.REPLACE);
-            }
-
-            int blen = (coder == Utils.LATIN1) ? ArrayEncoders.encodeFromLatin1(ce, val, 0, len, ba)
-                    : ArrayEncoders.encodeFromUTF16(ce, val, 0, len, ba);
-            if (blen != -1) {
-                return safeTrim(ba, blen);
-            }
-        }
 
         byte[] ba = new byte[en];
         if (len == 0) {
@@ -2676,12 +2577,12 @@ public class InlineString
             boolean trgtIsLatin1 = trgtStr.isLatin1();
             boolean replIsLatin1 = replStr.isLatin1();
             var ret = (thisIsLatin1 && trgtIsLatin1 && replIsLatin1)
-                    ? StringLatin1.replace(value(), thisLen,
-                    trgtStr.value(), trgtLen,
-                    replStr.value(), replLen)
-                    : StringUTF16.replace(value(), thisLen, thisIsLatin1,
-                    trgtStr.value(), trgtLen, trgtIsLatin1,
-                    replStr.value(), replLen, replIsLatin1);
+                    ? StringLatin1.replace(value, thisLen,
+                            trgtStr.value, trgtLen,
+                            replStr.value, replLen)
+                    : StringUTF16.replace(value, thisLen, thisIsLatin1,
+                            trgtStr.value, trgtLen, trgtIsLatin1,
+                            replStr.value, replLen, replIsLatin1);
             return ret;
 
         } else { // trgtLen == 0
@@ -4206,7 +4107,7 @@ public class InlineString
         } else {    // this.coder == LATIN && coder == String.UTF16
             if (isOptimised()) {
                 var val = value();
-                StringLatin1.inflate(val, 0, dst, dstBegin, val.length)
+                StringLatin1.inflate(val, 0, dst, dstBegin, val.length);
             } else {
                 StringLatin1.inflate(value, 0, dst, dstBegin, value.length);
             }
