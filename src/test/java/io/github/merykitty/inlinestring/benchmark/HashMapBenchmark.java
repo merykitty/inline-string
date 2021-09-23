@@ -1,10 +1,13 @@
-package io.github.merykitty.inlinestring;
+package io.github.merykitty.inlinestring.benchmark;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
+import io.github.merykitty.inlinestring.FastStringMap;
+import io.github.merykitty.inlinestring.InlineString;
+import io.github.merykitty.inlinestring.InlineStringHashMap;
 import org.openjdk.jmh.annotations.*;
 
 @BenchmarkMode(Mode.AverageTime)

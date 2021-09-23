@@ -128,6 +128,16 @@ public class InlineString
 
     private static final byte[] SMALL_STRING_VALUE = new byte[0];
     private static final int OPTIMISE_THRESHOLD = 16;
+    private static final ByteVector INDEX_VECTOR;
+
+    static {
+        var byteSpecies = ByteVector.SPECIES_PREFERRED;
+        byte[] indexArray = new byte[byteSpecies.length()];
+        for (byte i = 0; i < indexArray.length; i++) {
+            indexArray[i] = i;
+        }
+        INDEX_VECTOR = ByteVector.fromArray(byteSpecies, indexArray, 0);
+    }
 
     /**
      * The index is used for character storage.
@@ -1252,7 +1262,7 @@ public class InlineString
         checkIndex(i, length());
         if (isLatin1()) {
             if (isOptimised()) {
-                if (index < 8) {
+                if (i < 8) {
                     if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
                         return (char) (firstHalf << (7 - i) * 8 >>> (7 * 8));
                     } else {
@@ -1375,14 +1385,14 @@ public class InlineString
                 var data = dataAsLongs.reinterpretAsBytes();
                 // rotate the vector backward to have srcBegin at the beginning
                 data = data.rearrange(VectorShuffle.iota(byteSpecies, srcBegin, 1, true));
-                var zero = ByteVector.broadcast(byteSpecies, 0);
+                var zero = ByteVector.zero(byteSpecies);
                 // inflate by zipping the vector with vector 0
                 if (charSpecies.length() >= OPTIMISE_THRESHOLD || charSpecies.length() >= len) {
                     // if the vector can hold the whole inflated array
                     var shuffle = VectorShuffle.makeZip(byteSpecies, 0);
                     var inflated = data.rearrange(shuffle, zero);
                     var result = inflated.reinterpretAsShorts();
-                    var mask = charSpecies.indexInRange(0, len);
+                    var mask = INDEX_VECTOR.lt((byte) len);
                     result.intoCharArray(dst, dstBegin, mask);
                 } else {
                     var firstHalfShuffle = VectorShuffle.makeZip(byteSpecies, 0);
@@ -1391,7 +1401,7 @@ public class InlineString
                     var inflatedSecond = data.rearrange(secondHalfShuffle, zero);
                     var resultFirst = inflatedFirst.reinterpretAsShorts();
                     var resultSecond = inflatedSecond.reinterpretAsShorts();
-                    var mask = charSpecies.indexInRange(0, len - charSpecies.length());
+                    var mask = INDEX_VECTOR.lt((byte)(len - charSpecies.length());
                     resultFirst.intoCharArray(dst, dstBegin);
                     resultSecond.intoCharArray(dst, dstBegin + charSpecies.length(), mask);
                 }
@@ -1532,22 +1542,19 @@ public class InlineString
         if (len != sb.length()) {
             return false;
         }
-        byte v2[] = Utils.stringBuilderGetValue(sb);
+        byte[] sbv = Utils.stringBuilderGetValue(sb);
         if (coder() == Utils.stringBuilderGetCoder(sb)) {
             if (isOptimised()) {
-                var byteSpecies = ByteVector.SPECIES_PREFERRED;
-                var mask = byteSpecies.indexInRange(0, len);
-                var sbData = ByteVector.fromArray(byteSpecies, v2, 0, mask);
-                var sbDataAsLongs = sbData.reinterpretAsLongs();
-                return sbDataAsLongs.lane(0) == firstHalf && sbDataAsLongs.lane(1) == secondHalf;
+                var data = compress(sbv, 0, len);
+                return data.firstHalf == firstHalf && data.secondHalf == secondHalf;
             } else {
-                return StringLatin1.equals(value, v2);
+                return StringLatin1.indexOf(sbv, value) == 0;
             }
         } else {
             if (isLatin1()) {  // utf16 str and latin1 sb can never be "equal"
                 return false;
             } else {
-                return StringUTF16.contentEquals(value, v2, len);
+                return StringUTF16.contentEquals(value, sbv, len);
             }
         }
     }
@@ -1572,7 +1579,7 @@ public class InlineString
      * @since  1.5
      */
     public boolean contentEquals(CharSequence cs) {
-        // Argument is a StringBuffer, StringBuilder
+        // Argument is a StringBuilder
         if (cs instanceof StringBuilder sb) {
             return nonSyncContentEquals(sb);
         }
@@ -1595,12 +1602,10 @@ public class InlineString
                     return false;
                 }
             }
+            return true;
         } else {
-            if (!StringUTF16.contentEquals(value, cs, n)) {
-                return false;
-            }
+            return StringUTF16.contentEquals(value, cs, n);
         }
-        return true;
     }
 
     /**
@@ -4084,8 +4089,8 @@ public class InlineString
                 return new InlineString(SMALL_STRING_VALUE, limit, result.lane(0), result.lane(1));
             } else {
                 int batchDataSize = batchSize * dataLen;
-                var batchMask = byteSpecies.indexInRange(0, batchDataSize);
-                var singleMask = byteSpecies.indexInRange(0, dataLen);
+                var batchMask = INDEX_VECTOR.lt((byte) batchDataSize);
+                var singleMask  = INDEX_VECTOR.lt((byte) dataLen);
                 final byte[] multiple = new byte[limit];
                 int i = 0;
                 for (; i <= limit - batchDataSize; i += batchDataSize) {
@@ -4247,7 +4252,7 @@ public class InlineString
 
     private static SmallString compress(byte[] value, int beginIndex, int length) {
         var byteSpecies = ByteVector.SPECIES_PREFERRED;
-        var mask = byteSpecies.indexInRange(0,length);
+        var mask = INDEX_VECTOR.lt((byte) length);
         var data = ByteVector.fromArray(byteSpecies, value, beginIndex, mask);
         var dataAsLongs = data.reinterpretAsLongs();
         return new SmallString(dataAsLongs.lane(0), dataAsLongs.lane(1));
@@ -4255,8 +4260,7 @@ public class InlineString
 
     private static void uncompress(byte[] dst, int offset, int length, long firstHalf, long secondHalf) {
         var longSpecies = LongVector.SPECIES_PREFERRED;
-        var byteSpecies = ByteVector.SPECIES_PREFERRED;
-        var mask = byteSpecies.indexInRange(0, length);
+        var mask = INDEX_VECTOR.lt((byte) length);
         var dataAsLongs = LongVector.broadcast(longSpecies, 0)
                 .withLane(0, firstHalf)
                 .withLane(1, secondHalf);

@@ -1,4 +1,4 @@
-package io.github.merykitty.inlinestring;
+package io.github.merykitty.inlinestring.benchmark;
 
 import java.io.IOException;
 

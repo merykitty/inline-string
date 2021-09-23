@@ -87,17 +87,18 @@
                         <goals>
                             <goal>exec</goal>
                         </goals>
+                        <phase>test</phase>
                         <configuration>
                             <classpathScope>test</classpathScope>
                             <executable>java</executable>
                             <arguments>
                                 <argument>-cp</argument>
                                 <modulepath/>
-                                <argument>--add-modules=jdk.incubator.foreign</argument>
                                 <argument>--add-modules=jdk.incubator.vector</argument>
                                 <argument>--add-opens</argument>
                                 <argument>java.base/java.lang=ALL-UNNAMED</argument>
-                                <argument>io.github.merykitty.inlinestring.BenchmarkEntry</argument>
+                                <argument>-Djmh.blackhole.mode=COMPILER</argument>
+                                <argument>io.github.merykitty.inlinestring.benchmark.BenchmarkEntry</argument>
                                 <argument>GCBenchmark</argument>
                                 <argument>-prof</argument>
                                 <argument>gc</argument>
