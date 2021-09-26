@@ -40,12 +40,16 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Spliterator;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.*;
 
+import static io.github.merykitty.inlinestring.internal.Helper.*;
 import io.github.merykitty.inlinestring.internal.StringCoding;
 import io.github.merykitty.inlinestring.internal.Utils;
+import jdk.incubator.foreign.MemoryAccess;
+import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.vector.*;
 
 /**
@@ -127,17 +131,8 @@ public class InlineString
         implements Comparable<InlineString.ref>, CharSequence, Constable {
 
     private static final byte[] SMALL_STRING_VALUE = new byte[0];
-    private static final int OPTIMISE_THRESHOLD = 16;
-    private static final ByteVector INDEX_VECTOR;
 
-    static {
-        var byteSpecies = ByteVector.SPECIES_PREFERRED;
-        byte[] indexArray = new byte[byteSpecies.length()];
-        for (byte i = 0; i < indexArray.length; i++) {
-            indexArray[i] = i;
-        }
-        INDEX_VECTOR = ByteVector.fromArray(byteSpecies, indexArray, 0);
-    }
+    private static final int COMPRESS_THRESHOLD = 16;
 
     /**
      * The index is used for character storage.
@@ -275,7 +270,7 @@ public class InlineString
         if (Utils.COMPACT_STRINGS) {
             byte[] val = StringLatin1.toBytes(codePoints, offset, count);
             if (val != null) {
-                if (optimisable(val.length)) {
+                if (compressible(val.length)) {
                     var compressedValue = compress(val);
                     this.value = SMALL_STRING_VALUE;
                     this.length = val.length;
@@ -376,7 +371,7 @@ public class InlineString
             this.secondHalf = EMPTY_STRING.secondHalf;
         } else if (charset == StandardCharsets.UTF_8) {
             if (Utils.COMPACT_STRINGS && !StringCoding.hasNegatives(bytes, offset, length)) {
-                if (optimisable(length)) {
+                if (compressible(length)) {
                     var compressedValue = compress(bytes, offset, length);
                     this.value = SMALL_STRING_VALUE;
                     this.length = length;
@@ -416,10 +411,10 @@ public class InlineString
                         break;
                     }
                     if (offset == sl) {
-                        if (dp != dst.length && !optimisable(dp)) {
+                        if (dp != dst.length && !compressible(dp)) {
                             dst = Arrays.copyOf(dst, dp);
                         }
-                        if (optimisable(dp)) {
+                        if (compressible(dp)) {
                             var compressedValue = compress(dst, 0, dp);
                             this.value = SMALL_STRING_VALUE;
                             this.length = dp;
@@ -452,7 +447,7 @@ public class InlineString
             }
         } else if (charset == StandardCharsets.ISO_8859_1) {
             if (Utils.COMPACT_STRINGS) {
-                if (optimisable(length)) {
+                if (compressible(length)) {
                     var compressedValue = compress(bytes, offset, length);
                     this.value = SMALL_STRING_VALUE;
                     this.length = length;
@@ -473,7 +468,7 @@ public class InlineString
             }
         } else if (charset == StandardCharsets.US_ASCII) {
             if (Utils.COMPACT_STRINGS && !StringCoding.hasNegatives(bytes, offset, length)) {
-                if (optimisable(length)) {
+                if (compressible(length)) {
                     var compressedValue = compress(bytes, offset, length);
                     this.value = SMALL_STRING_VALUE;
                     this.length = length;
@@ -525,7 +520,7 @@ public class InlineString
             if (Utils.COMPACT_STRINGS) {
                 byte[] bs = StringUTF16.compress(ca, 0, caLen);
                 if (bs != null) {
-                    if (optimisable(caLen)) {
+                    if (compressible(caLen)) {
                         var compressedValue = compress(bs, 0, caLen);
                         this.value = SMALL_STRING_VALUE;
                         this.length = caLen;
@@ -1164,20 +1159,12 @@ public class InlineString
      */
     public char charAt(int index) {
         if (isLatin1()) {
-            if (isOptimised()) {
+            if (isCompressed()) {
                 checkIndex(index, length());
                 if (index < 8) {
-                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
-                        return (char) (firstHalf << (7 - index) * 8 >>> (7 * 8));
-                    } else {
-                        return (char) (firstHalf << (index * 8) >>> (7 * 8));
-                    }
+                    return (char)((firstHalf >> (index * 8)) & 0xff);
                 } else {
-                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
-                        return (char) (secondHalf << ((15 - index) * 8) >>> (7 * 8));
-                    } else {
-                        return (char) (secondHalf << ((index - 8) * 8) >>> (7 * 8));
-                    }
+                    return (char)((secondHalf >> ((index - 8) * 8)) & 0xff);
                 }
             } else {
                 return StringLatin1.charAt(value, index);
@@ -1212,19 +1199,11 @@ public class InlineString
     public int codePointAt(int index) {
         checkIndex(index, length());
         if (isLatin1()) {
-            if (isOptimised()) {
+            if (isCompressed()) {
                 if (index < 8) {
-                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
-                        return (int) (firstHalf << (7 - index) * 8 >>> (7 * 8));
-                    } else {
-                        return (int) (firstHalf << (index * 8) >>> (7 * 8));
-                    }
+                    return (int)(firstHalf >> (index * 8)) & 0xff;
                 } else {
-                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
-                        return (int) (secondHalf << ((15 - index) * 8) >>> (7 * 8));
-                    } else {
-                        return (int) (secondHalf << ((index - 8) * 8) >>> (7 * 8));
-                    }
+                    return (int)(secondHalf >> ((index - 8) * 8)) & 0xff;
                 }
             } else {
                 return value[index] & 0xff;
@@ -1261,19 +1240,11 @@ public class InlineString
         int i = index - 1;
         checkIndex(i, length());
         if (isLatin1()) {
-            if (isOptimised()) {
+            if (isCompressed()) {
                 if (i < 8) {
-                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
-                        return (char) (firstHalf << (7 - i) * 8 >>> (7 * 8));
-                    } else {
-                        return (char) (firstHalf << (i * 8) >>> (7 * 8));
-                    }
+                    return (int)(firstHalf >> (i * 8)) & 0xff;
                 } else {
-                    if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
-                        return (char) (secondHalf << ((15 - i) * 8) >>> (7 * 8));
-                    } else {
-                        return (char) (secondHalf << ((i - 8) * 8) >>> (7 * 8));
-                    }
+                    return (int)(secondHalf >> ((i - 8) * 8)) & 0xff;
                 }
             } else {
                 return (value[i] & 0xff);
@@ -1374,42 +1345,54 @@ public class InlineString
         checkBoundsBeginEnd(srcBegin, srcEnd, length());
         checkBoundsOffCount(dstBegin, srcEnd - srcBegin, dst.length);
         if (isLatin1()) {
-            if (isOptimised()) {
+            if (isCompressed()) {
                 int len = srcEnd - srcBegin;
-                var longSpecies = LongVector.SPECIES_PREFERRED;
-                var byteSpecies = ByteVector.SPECIES_PREFERRED;
-                var charSpecies = ShortVector.SPECIES_PREFERRED;
-                var dataAsLongs = LongVector.broadcast(longSpecies, 0)
+                var longSpecies = LongVector.SPECIES_128;
+                var byteSpecies = ByteVector.SPECIES_128;
+                var charSpecies = ShortVector.SPECIES_128;
+                var dataAsLongs = LongVector.zero(longSpecies)
                         .withLane(0, firstHalf)
                         .withLane(1, secondHalf);
                 var data = dataAsLongs.reinterpretAsBytes();
                 // rotate the vector backward to have srcBegin at the beginning
-                data = data.rearrange(VectorShuffle.iota(byteSpecies, srcBegin, 1, true));
-                var zero = ByteVector.zero(byteSpecies);
-                // inflate by zipping the vector with vector 0
-                if (charSpecies.length() >= OPTIMISE_THRESHOLD || charSpecies.length() >= len) {
+                if (srcBegin != 0) {
+                    data = data.rearrange(byteSpecies.iotaShuffle(srcBegin, 1, true));
+                }
+                // inflate by casting the bytes to shorts
+                if (charSpecies.length() >= len) {
                     // if the vector can hold the whole inflated array
-                    var shuffle = VectorShuffle.makeZip(byteSpecies, 0);
-                    var inflated = data.rearrange(shuffle, zero);
-                    var result = inflated.reinterpretAsShorts();
-                    var mask = INDEX_VECTOR.lt((byte) len);
-                    result.intoCharArray(dst, dstBegin, mask);
+                    var inflated = data.castShape(charSpecies, 0).reinterpretAsLongs();
+                    getCharsHelper(dst, dstBegin, len, inflated.lane(0));
+                    getCharsHelper(dst, dstBegin + 4, len - 4, inflated.lane(1));
                 } else {
-                    var firstHalfShuffle = VectorShuffle.makeZip(byteSpecies, 0);
-                    var secondHalfShuffle = VectorShuffle.makeZip(byteSpecies, 1);
-                    var inflatedFirst = data.rearrange(firstHalfShuffle, zero);
-                    var inflatedSecond = data.rearrange(secondHalfShuffle, zero);
-                    var resultFirst = inflatedFirst.reinterpretAsShorts();
-                    var resultSecond = inflatedSecond.reinterpretAsShorts();
-                    var mask = INDEX_VECTOR.lt((byte)(len - charSpecies.length());
-                    resultFirst.intoCharArray(dst, dstBegin);
-                    resultSecond.intoCharArray(dst, dstBegin + charSpecies.length(), mask);
+                    var inflatedFirst = data.castShape(charSpecies, 0).reinterpretAsShorts();
+                    var inflatedSecond = data.castShape(charSpecies, 1).reinterpretAsLongs();
+                    inflatedFirst.intoCharArray(dst, dstBegin);
+                    getCharsHelper(dst, dstBegin + 8, len - 8, inflatedSecond.lane(0));
+                    getCharsHelper(dst, dstBegin + 12, len - 12, inflatedSecond.lane(1));
                 }
             } else {
                 StringLatin1.getChars(value, srcBegin, srcEnd, dst, dstBegin);
             }
         } else {
             StringUTF16.getChars(value, srcBegin, srcEnd, dst, dstBegin);
+        }
+    }
+
+    private static void getCharsHelper(char[] dst, int offset, int length, long value) {
+        var seg = MemorySegment.ofArray(dst);
+        offset <<= 1;
+        if (length >= 4) {
+            MemoryAccess.setLongAtOffset(seg, offset, value);
+        } else if (length > 0) {
+            switch (length) {
+                case 1 -> MemoryAccess.setShortAtOffset(seg, offset, (short) value);
+                case 2 -> MemoryAccess.setIntAtOffset(seg, offset, (int) value);
+                default -> {
+                    MemoryAccess.setIntAtOffset(seg, offset, (int) value);
+                    MemoryAccess.setShortAtOffset(seg, offset + 4, (short)(value >> (4 * 8)));
+                }
+            }
         }
     }
 
@@ -1498,7 +1481,7 @@ public class InlineString
      */
     public boolean equals(InlineString aString) {
         if (Utils.COMPACT_STRINGS) {
-            if (isOptimised()) {
+            if (isCompressed() || aString.isCompressed()) {
                 return this.value == aString.value && this.length == aString.length &&
                         this.firstHalf == aString.firstHalf && this.secondHalf == aString.secondHalf;
             } else {
@@ -1544,10 +1527,11 @@ public class InlineString
         }
         byte[] sbv = Utils.stringBuilderGetValue(sb);
         if (coder() == Utils.stringBuilderGetCoder(sb)) {
-            if (isOptimised()) {
+            if (isCompressed()) {
                 var data = compress(sbv, 0, len);
                 return data.firstHalf == firstHalf && data.secondHalf == secondHalf;
             } else {
+                // since the lengths are equal the check will only occur in 1 iteration
                 return StringLatin1.indexOf(sbv, value) == 0;
             }
         } else {
@@ -1583,7 +1567,7 @@ public class InlineString
         if (cs instanceof StringBuilder sb) {
             return nonSyncContentEquals(sb);
         }
-        // Argument is a PrimitiveString
+        // Argument is an InlineString
         if (cs instanceof InlineString ps) {
             return equals(ps);
         }
@@ -1638,8 +1622,7 @@ public class InlineString
      * @see  #codePoints()
      */
     public boolean equalsIgnoreCase(InlineString anotherString) {
-        return (this.value() == anotherString.value() && this.coder() == anotherString.coder())
-                || (anotherString.length() == length()
+        return (anotherString.length() == length()
                         && regionMatches(true, 0, anotherString, 0, length()));
     }
 
@@ -1987,8 +1970,57 @@ public class InlineString
      * @return  a hash code index for this object.
      */
     public int hashCode() {
-        return isLatin1() ? StringLatin1.hashCode(value())
-                : StringUTF16.hashCode(value());
+        if (isLatin1()) {
+            if (isCompressed()) {
+                var longSpecies = LongVector.SPECIES_128;
+                var byteSpecies = ByteVector.SPECIES_128;
+                var intSpecies = IntVector.SPECIES_PREFERRED;
+                var dataAsLongs = LongVector.zero(longSpecies)
+                        .withLane(0, firstHalf)
+                        .withLane(1, secondHalf);
+                var data = dataAsLongs.reinterpretAsBytes();
+                int len = length();
+                data = data.rearrange(VectorShuffle.iota(byteSpecies, len - byteSpecies.length(), 1, true));
+                var coef = IntVector.fromArray(intSpecies, HASH_COEF, 0);
+                if (intSpecies.length() == 16) {
+                    // bitSize == 512
+                    var dataAsInts = data.castShape(intSpecies, 0);
+                    return coef.mul(dataAsInts).reduceLanes(VectorOperators.ADD);
+                } else if (intSpecies.length() == 8) {
+                    // bitSize == 256
+                    var dataAsIntsFirst = data.castShape(intSpecies, 1);
+                    var dataAsIntsSecond = data.castShape(intSpecies, 0);
+                    var computedFirst = coef.mul(dataAsIntsFirst);
+                    var computedSecond = coef.mul(dataAsIntsSecond);
+                    int partCoef = 31 * 31 * 31 * 31 * 31 * 31 * 31 * 31;
+                    return computedSecond.mul(partCoef).add(computedFirst).reduceLanes(VectorOperators.ADD);
+                } else if (intSpecies.length() == 4) {
+                    // bitSize == 128
+                    var dataAsIntsFirst = data.castShape(intSpecies, 3);
+                    var dataAsIntsSecond = data.castShape(intSpecies, 2);
+                    var dataAsIntsThird = data.castShape(intSpecies, 1);
+                    var dataAsIntsFourth = data.castShape(intSpecies, 0);
+                    var computedFirst = coef.mul(dataAsIntsFirst);
+                    var computedSecond = coef.mul(dataAsIntsSecond);
+                    var computedThird = coef.mul(dataAsIntsThird);
+                    var computedFourth = coef.mul(dataAsIntsFourth);
+                    int partCoefSecond = 31 * 31 * 31 * 31;
+                    int partCoefThird = partCoefSecond * 31 * 31 * 31 * 31;
+                    int partCoefFourth = partCoefThird * 31 * 31 * 31 * 31;
+                    return computedFourth.mul(partCoefFourth)
+                            .add(computedThird.mul(partCoefThird))
+                            .add(computedSecond.mul(partCoefSecond))
+                            .add(computedFirst)
+                            .reduceLanes(VectorOperators.ADD);
+                } else {
+                    return StringLatin1.hashCode(value());
+                }
+            } else {
+                return StringLatin1.hashCode(value);
+            }
+        } else {
+            return StringUTF16.hashCode(value);
+        }
     }
 
     /**
@@ -4059,59 +4091,42 @@ public class InlineString
         if (isEmpty() || count == 0) {
             return EMPTY_STRING;
         }
-        final int dataLen = isOptimised() ? length : value.length;
+        final int dataLen = isCompressed() ? length : value.length;
         if (Integer.MAX_VALUE / count < dataLen) {
             throw new OutOfMemoryError("Required length exceeds implementation limit");
         }
-        if (isOptimised()) {
-            int limit = dataLen * count;
-            int maxBatchSize = OPTIMISE_THRESHOLD / dataLen;
-            int batchSize = Math.min(count, maxBatchSize);
-            var byteSpecies = ByteVector.SPECIES_PREFERRED;
-            var longSpecies = LongVector.SPECIES_PREFERRED;
-            var dataAsLongs = LongVector.broadcast(longSpecies, 0)
-                    .withLane(0, firstHalf)
-                    .withLane(1, secondHalf);
-            var data = dataAsLongs.reinterpretAsBytes();
-            var batch = data;
-            if (dataLen == 1) {
-                batch = ByteVector.broadcast(byteSpecies, data.lane(0));
-            } else {
-                var shuffle = VectorShuffle.iota(byteSpecies, -dataLen, 1, true);
-                var temp = data;
-                for (int i = 1; i < batchSize; i++) {
-                    temp = temp.rearrange(shuffle);
-                    batch = batch.or(temp);
-                }
-            }
-            if (batchSize <= count) {
-                var result = data.reinterpretAsLongs();
-                return new InlineString(SMALL_STRING_VALUE, limit, result.lane(0), result.lane(1));
-            } else {
-                int batchDataSize = batchSize * dataLen;
-                var batchMask = INDEX_VECTOR.lt((byte) batchDataSize);
-                var singleMask  = INDEX_VECTOR.lt((byte) dataLen);
-                final byte[] multiple = new byte[limit];
+        int limit = dataLen * count;
+        byte[] multiple;
+        if (isCompressed()) {
+            if (compressible(limit)) {
+                // since count > 1 and limit <= 16, length <= 8
+                long firstHalf = 0;
                 int i = 0;
-                for (; i <= limit - batchDataSize; i += batchDataSize) {
-                    batch.intoArray(multiple, i, batchMask);
+                for (; i < Math.min(limit, 8); i += length()) {
+                    firstHalf |= (this.firstHalf >>> (i * length() * 8));
                 }
-                for (; i < limit; i += dataLen) {
-                    data.intoArray(multiple, i, singleMask);
+                long secondHalf = this.firstHalf << ((8 - i * length()) * 8);
+                for (; i < limit; i += length()) {
+                    secondHalf |= this.firstHalf >>> ((i * length() - 8) * 8);
                 }
-                return new InlineString(multiple, limit, Utils.LATIN1, 0);
+                return new InlineString(SMALL_STRING_VALUE, limit, firstHalf, secondHalf);
+            } else {
+                multiple = new byte[limit];
+                // limit > 16 here
+                var seg = MemorySegment.ofArray(multiple);
+                MemoryAccess.setLongAtOffset(seg, 0, firstHalf);
+                MemoryAccess.setLongAtOffset(seg, 8, secondHalf);
             }
         } else {
-            final int limit = dataLen * count;
-            final byte[] multiple = new byte[limit];
+            multiple = new byte[limit];
             System.arraycopy(value, 0, multiple, 0, dataLen);
-            int copied = dataLen;
-            for (; copied < limit - copied; copied <<= 1) {
-                System.arraycopy(multiple, 0, multiple, copied, copied);
-            }
-            System.arraycopy(multiple, 0, multiple, copied, limit - copied);
-            return new InlineString(multiple, limit, coder(), 0);
         }
+        int copied = dataLen;
+        for (; copied < limit - copied; copied <<= 1) {
+            System.arraycopy(multiple, 0, multiple, copied, copied);
+        }
+        System.arraycopy(multiple, 0, multiple, copied, limit - copied);
+        return new InlineString(multiple, limit, coder(), 0);
     }
 
     ////////////////////////////////////////////////////////////////
@@ -4128,13 +4143,13 @@ public class InlineString
      */
     void getBytes(byte[] dst, int dstBegin, byte coder) {
         if (coder() == coder) {
-            if (isOptimised()) { // must be LATIN1
+            if (isCompressed()) { // must be LATIN1
                 uncompress(dst, dstBegin, this.length, this.firstHalf, this.secondHalf);
             } else {
                 System.arraycopy(value, 0, dst, dstBegin << coder, value.length);
             }
         } else {    // this.coder == LATIN && coder == String.UTF16
-            if (isOptimised()) {
+            if (isCompressed()) {
                 var val = value();
                 StringLatin1.inflate(val, 0, dst, dstBegin, val.length);
             } else {
@@ -4163,7 +4178,7 @@ public class InlineString
         if (Utils.COMPACT_STRINGS) {
             byte[] val = StringUTF16.compress(value, off, len);
             if (val != null) {
-                if (optimisable(len)) {
+                if (compressible(len)) {
                     var compressedValue = compress(val);
                     this.value = SMALL_STRING_VALUE;
                     this.length = val.length;
@@ -4189,7 +4204,7 @@ public class InlineString
      * Package private constructor which shares index array for speed.
      */
     InlineString(byte[] value, byte coder) {
-        if (optimisable(value.length, coder)) {
+        if (compressible(value.length, coder)) {
             var compressedValue = compress(value);
             this.value = SMALL_STRING_VALUE;
             this.length = value.length;
@@ -4211,7 +4226,7 @@ public class InlineString
     }
 
     byte[] value() {
-        if (!isOptimised()) {
+        if (!isCompressed()) {
             return value;
         } else {
             return uncompress(length, firstHalf, secondHalf);
@@ -4220,7 +4235,7 @@ public class InlineString
 
     byte coder() {
         if (Utils.COMPACT_STRINGS) {
-            if (isOptimised()) {
+            if (isCompressed()) {
                 return Utils.LATIN1;
             } else {
                 return (byte) firstHalf;
@@ -4234,38 +4249,34 @@ public class InlineString
         return Utils.COMPACT_STRINGS && coder() == Utils.LATIN1;
     }
 
-    private boolean isOptimised() {
-        return value == SMALL_STRING_VALUE;
+    private boolean isCompressed() {
+        return COMPRESSED_STRINGS && value == SMALL_STRING_VALUE;
     }
 
-    private static boolean optimisable(int length, byte coder) {
-        return Utils.COMPACT_STRINGS && coder == Utils.LATIN1 && length <= OPTIMISE_THRESHOLD;
+    private static boolean compressible(int length, byte coder) {
+        return COMPRESSED_STRINGS && coder == Utils.LATIN1 && length <= COMPRESS_THRESHOLD;
     }
 
-    private static boolean optimisable(int length) {
-        return optimisable(length, Utils.LATIN1);
+    private static boolean compressible(int length) {
+        return compressible(length, Utils.LATIN1);
     }
+
+    @__primitive__
+    private record SmallString(long firstHalf, long secondHalf) {};
 
     private static SmallString compress(byte[] value) {
         return compress(value, 0, value.length);
     }
 
-    private static SmallString compress(byte[] value, int beginIndex, int length) {
-        var byteSpecies = ByteVector.SPECIES_PREFERRED;
-        var mask = INDEX_VECTOR.lt((byte) length);
-        var data = ByteVector.fromArray(byteSpecies, value, beginIndex, mask);
-        var dataAsLongs = data.reinterpretAsLongs();
-        return new SmallString(dataAsLongs.lane(0), dataAsLongs.lane(1));
+    private static SmallString compress(byte[] value, int offset, int length) {
+        long firstHalf = compressHelper(value, offset, length);
+        long secondHalf = compressHelper(value, offset + 8, length - 8);
+        return new SmallString(firstHalf, secondHalf);
     }
 
     private static void uncompress(byte[] dst, int offset, int length, long firstHalf, long secondHalf) {
-        var longSpecies = LongVector.SPECIES_PREFERRED;
-        var mask = INDEX_VECTOR.lt((byte) length);
-        var dataAsLongs = LongVector.broadcast(longSpecies, 0)
-                .withLane(0, firstHalf)
-                .withLane(1, secondHalf);
-        var data = dataAsLongs.reinterpretAsBytes();
-        data.intoArray(dst, offset, mask);
+        uncompressHelper(dst, offset, length, firstHalf);
+        uncompressHelper(dst, offset + 8, length - 8, secondHalf);
     }
 
     private static byte[] uncompress(int length, long firstHalf, long secondHalf) {
@@ -4274,8 +4285,59 @@ public class InlineString
         return result;
     }
 
-    @__primitive__
-    private record SmallString(long firstHalf, long secondHalf) {};
+    private static long compressHelper(byte[] value, int offset, int length) {
+        var seg = MemorySegment.ofArray(value);
+        if (length <= 0) {
+            return 0;
+        } else if (length >= 8) {
+            return MemoryAccess.getLongAtOffset(seg, offset);
+        } else {
+            return switch (length) {
+                case 1 -> MemoryAccess.getByteAtOffset(seg, offset);
+                case 2 -> MemoryAccess.getShortAtOffset(seg, offset);
+                case 3 -> MemoryAccess.getShortAtOffset(seg, offset)
+                        | (long) MemoryAccess.getByteAtOffset(seg, offset + 2) << (2 * 8);
+                case 4 -> MemoryAccess.getIntAtOffset(seg, offset);
+                case 5 -> MemoryAccess.getIntAtOffset(seg, offset)
+                        | (long) MemoryAccess.getByteAtOffset(seg, offset + 4) << (4 * 8);
+                case 6 -> MemoryAccess.getIntAtOffset(seg, offset)
+                        | (long) MemoryAccess.getShortAtOffset(seg, offset + 4) << (4 * 8);
+                default -> MemoryAccess.getIntAtOffset(seg, offset)
+                        | (long) MemoryAccess.getShortAtOffset(seg, offset + 4) << (4 * 8)
+                        | (long) MemoryAccess.getByteAtOffset(seg, offset + 6) << (6 * 8);
+            };
+        }
+    }
+
+    private static void uncompressHelper(byte[] dst, int offset, int length, long value) {
+        var seg = MemorySegment.ofArray(dst);
+        if (length >= 8) {
+            MemoryAccess.setLongAtOffset(seg, offset, value);
+        } else if (length > 0) {
+            switch (length) {
+                case 1 -> MemoryAccess.setByteAtOffset(seg, offset, (byte) value);
+                case 2 -> MemoryAccess.setShortAtOffset(seg, offset, (short) value);
+                case 3 -> {
+                    MemoryAccess.setShortAtOffset(seg, offset, (short) value);
+                    MemoryAccess.setByteAtOffset(seg, offset + 2, (byte) (value >> (2 * 8)));
+                }
+                case 4 -> MemoryAccess.setIntAtOffset(seg, offset, (int) value);
+                case 5 -> {
+                    MemoryAccess.setIntAtOffset(seg, offset, (int) value);
+                    MemoryAccess.setByteAtOffset(seg, offset + 4, (byte) (value >> (4 * 8)));
+                }
+                case 6 -> {
+                    MemoryAccess.setIntAtOffset(seg, offset, (int) value);
+                    MemoryAccess.setShortAtOffset(seg, offset + 4, (short) (value >> (4 * 8)));
+                }
+                default -> {
+                    MemoryAccess.setIntAtOffset(seg, offset, (int) value);
+                    MemoryAccess.setShortAtOffset(seg, offset + 4, (short) (value >> (4 * 8)));
+                    MemoryAccess.setByteAtOffset(seg, offset + 6, (byte) (value >> (6 * 8)));
+                }
+            }
+        }
+    }
 
     /*
      * StringIndexOutOfBoundsException  if {@code index} is

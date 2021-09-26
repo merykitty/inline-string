@@ -2,7 +2,6 @@ package io.github.merykitty.inlinestring.benchmark;
 
 import io.github.merykitty.inlinestring.InlineString;
 import org.openjdk.jmh.annotations.*;
-import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.concurrent.TimeUnit;
 
@@ -12,23 +11,26 @@ import java.util.concurrent.TimeUnit;
 @Fork(value = 1)
 @Warmup(iterations = 5)
 @Measurement(iterations = 5)
-public class ConstructorBenchmark {
+public class HashCodeBenchmark {
     @Param({"Hello world!", "This is an example of a Latin1 long string", "Đây là một UTF16 String"})
     private String param;
 
-    char[] charArray;
+    String str;
+    InlineString inlStr;
+
     @Setup(Level.Trial)
-    public void charArray() {
-        charArray = param.toCharArray();
+    public void setUp() {
+        this.str = new String(param);
+        this.inlStr = new InlineString(param);
     }
 
     @Benchmark
-    public void charArrayStr(Blackhole bh) {
-        bh.consume(new String(charArray));
+    public int str() {
+        return str.hashCode();
     }
 
     @Benchmark
-    public void charArrayInl(Blackhole bh) {
-        bh.consume(new InlineString(charArray));
+    public int inlStr() {
+        return inlStr.hashCode();
     }
 }
