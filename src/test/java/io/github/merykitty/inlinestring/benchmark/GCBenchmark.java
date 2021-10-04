@@ -1,11 +1,20 @@
 package io.github.merykitty.inlinestring.benchmark;
 
+import io.github.merykitty.inlinestring.InlineString;
 import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.SegmentAllocator;
 import jdk.incubator.vector.*;
 import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.infra.Blackhole;
+import sun.misc.Unsafe;
 
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.random.RandomGenerator;
 
@@ -16,156 +25,192 @@ import java.util.random.RandomGenerator;
 @Warmup(iterations = 5)
 @Measurement(iterations = 5)
 public class GCBenchmark {
-    byte[] array;
+    byte[] bytes;
+    char[] chars;
     int length;
-    int[] intArray;
-    int intLength;
-    int rotation;
+    int offset;
     long firstHalf;
     long secondHalf;
 
-    static final ByteArrayCache BUFFER;
-    static final VectorShuffle<Byte> INFLATION_SHUFFLE_0 = VectorShuffle.makeZip(ByteVector.SPECIES_PREFERRED, 0);
-    static final VectorShuffle<Byte> INFLATION_SHUFFLE_1 = VectorShuffle.makeZip(ByteVector.SPECIES_PREFERRED, 1);
-    static final VectorShuffle<Byte> COMPRESS_SHUFFLE = VectorShuffle.makeUnzip(ByteVector.SPECIES_PREFERRED, 0);
-    static final ByteVector INDEX_VECTOR;
+    private static final Unsafe UNSAFE;
+
+    private static final VarHandle BYTE_ARRAY_AS_LONGS = MethodHandles.byteArrayViewVarHandle(Long.TYPE.arrayType(), ByteOrder.nativeOrder());
+    private static final VarHandle BYTE_ARRAY_AS_INTS = MethodHandles.byteArrayViewVarHandle(Integer.TYPE.arrayType(), ByteOrder.nativeOrder());
+    private static final VarHandle BYTE_ARRAY_AS_SHORTS = MethodHandles.byteArrayViewVarHandle(Short.TYPE.arrayType(), ByteOrder.nativeOrder());
+
     static {
-        BUFFER = new ByteArrayCache();
-        var byteSpecies = ByteVector.SPECIES_PREFERRED;
-        byte[] indexArray = new byte[byteSpecies.length()];
-        for (int i = 0; i < indexArray.length; i++) {
-            indexArray[i] = (byte)i;
+        try {
+            var unsafe = Unsafe.class.getDeclaredField("theUnsafe");
+            unsafe.setAccessible(true);
+            UNSAFE = (Unsafe) unsafe.get(null);
+        } catch (Exception e) {
+            throw new AssertionError(e);
         }
-        INDEX_VECTOR = ByteVector.fromArray(byteSpecies, indexArray, 0);
     }
 
-    static class ByteArrayCache extends ThreadLocal<byte[]> {
-        @Override
-        protected byte[] initialValue() {
-            return new byte[ByteVector.SPECIES_MAX.length()];
-        }
-    }
+    @__primitive__
+    record SmallString(long firstHalf, long secondHalf) {}
+
+    @__primitive__
+    private record SmallStringCharData(long firstQuarter, long secondQuarter, long thirdQuarter, long fourthQuarter) {}
 
     @Setup(Level.Trial)
-    public void setUp() {
+    public void warmup() {
         var random = RandomGenerator.getDefault();
-        length = 14;
-        rotation = 5;
-        array = new byte[256];
-        random.nextBytes(array);
-        intLength = 3;
-        intArray = random.ints(intLength).toArray();
-    }
-
-    @Benchmark
-    public void foreignBytesToLongs() {
-        firstHalf = compressHelper(array, 0, length);
-        secondHalf = compressHelper(array, 8, length - 8);
-    }
-
-    @Benchmark
-    public void foreignLongsToBytes() {
-        uncompressHelper(array, 0, length, firstHalf);
-        uncompressHelper(array, 8, length - 8, secondHalf);
-    }
-
-//    @Benchmark
-    public void vectorIntsToLongs() {
-        var intSpecies = IntVector.SPECIES_PREFERRED;
-        var mask = intSpecies.indexInRange(0, intLength);
-        var dataAsInts = IntVector.fromArray(intSpecies, intArray, 0, mask);
-        var dataAsLongs = dataAsInts.reinterpretAsLongs();
-        firstHalf = dataAsLongs.lane(0);
-        secondHalf = dataAsLongs.lane(1);
-    }
-
-//    @Benchmark
-    public void vectorLongsToInts() {
-        var longSpecies = LongVector.SPECIES_PREFERRED;
-        var intSpecies = IntVector.SPECIES_PREFERRED;
-        var mask = intSpecies.indexInRange(0, intLength);
-        var dataAsLongs = LongVector.zero(longSpecies)
-                .withLane(0, firstHalf)
-                .withLane(1, secondHalf);
-        var dataAsInts = dataAsLongs.reinterpretAsInts();
-        dataAsInts.intoArray(intArray, 0, mask);
-    }
-
-    public byte vectorRotation() {
-        var byteSpecies = ByteVector.SPECIES_128;
-        var data = ByteVector.fromArray(byteSpecies, array, 0);
-        var shuffleVector = VectorShuffle.iota(byteSpecies, rotation, 1, true);
-        data = data.rearrange(shuffleVector);
-        return data.lane(0);
-    }
-
-    public short vectorInflation() {
-        var byteSpecies = ByteVector.SPECIES_128;
-        var charSpecies = ShortVector.SPECIES_PREFERRED;
-        var data = ByteVector.fromArray(byteSpecies, array, 0);
-        var dataAsChars = data.castShape(charSpecies, 0).reinterpretAsShorts();
-        return dataAsChars.lane(0);
-    }
-
-    public byte vectorCompression() {
-        var byteSpecies = ByteVector.SPECIES_PREFERRED;
-        var data = ByteVector.fromArray(byteSpecies, array, 0);
-        var zero = ByteVector.zero(byteSpecies);
-        data = data.rearrange(COMPRESS_SHUFFLE, zero);
-        return data.lane(0);
-    }
-
-    private static long compressHelper(byte[] value, int offset, int length) {
-        var seg = MemorySegment.ofArray(value);
-        if (length <= 0) {
-            return 0;
-        } else if (length >= 8) {
-            return MemoryAccess.getLongAtOffset(seg, offset);
-        } else {
-            return switch (length) {
-                case 1 -> MemoryAccess.getByteAtOffset(seg, offset);
-                case 2 -> MemoryAccess.getShortAtOffset(seg, offset);
-                case 3 -> MemoryAccess.getShortAtOffset(seg, offset)
-                        | (long) MemoryAccess.getByteAtOffset(seg, offset + 2) << (2 * 8);
-                case 4 -> MemoryAccess.getIntAtOffset(seg, offset);
-                case 5 -> MemoryAccess.getIntAtOffset(seg, offset)
-                        | (long) MemoryAccess.getByteAtOffset(seg, offset + 4) << (4 * 8);
-                case 6 -> MemoryAccess.getIntAtOffset(seg, offset)
-                        | (long) MemoryAccess.getShortAtOffset(seg, offset + 4) << (4 * 8);
-                default -> MemoryAccess.getIntAtOffset(seg, offset)
-                        | (long) MemoryAccess.getShortAtOffset(seg, offset + 4) << (4 * 8)
-                        | (long) MemoryAccess.getByteAtOffset(seg, offset + 6) << (6 * 8);
-            };
-        }
-    }
-
-    private static void uncompressHelper(byte[] dst, int offset, int length, long value) {
-        var seg = MemorySegment.ofArray(dst);
-        if (length >= 8) {
-            MemoryAccess.setLongAtOffset(seg, offset, value);
-        } else if (length > 0) {
-            switch (length) {
-                case 1 -> MemoryAccess.setByteAtOffset(seg, offset, (byte) value);
-                case 2 -> MemoryAccess.setShortAtOffset(seg, offset, (short) value);
-                case 3 -> {
-                    MemoryAccess.setShortAtOffset(seg, offset, (short) value);
-                    MemoryAccess.setByteAtOffset(seg, offset + 2, (byte) (value >> (2 * 8)));
-                }
-                case 4 -> MemoryAccess.setIntAtOffset(seg, offset, (int) value);
-                case 5 -> {
-                    MemoryAccess.setIntAtOffset(seg, offset, (int) value);
-                    MemoryAccess.setByteAtOffset(seg, offset + 4, (byte) (value >> (4 * 8)));
-                }
-                case 6 -> {
-                    MemoryAccess.setIntAtOffset(seg, offset, (int) value);
-                    MemoryAccess.setShortAtOffset(seg, offset + 4, (short) (value >> (4 * 8)));
-                }
-                default -> {
-                    MemoryAccess.setIntAtOffset(seg, offset, (int) value);
-                    MemoryAccess.setShortAtOffset(seg, offset + 4, (short) (value >> (4 * 8)));
-                    MemoryAccess.setByteAtOffset(seg, offset + 6, (byte) (value >> (6 * 8)));
+        for (int i = 0; i < 1_000_000; i++) {
+            bytes = new byte[random.nextInt(1, 32)];
+            random.nextBytes(bytes);
+            chars = new String(bytes, StandardCharsets.US_ASCII).toCharArray();
+            while (true) {
+                int first = random.nextInt(bytes.length);
+                int second = random.nextInt(bytes.length);
+                offset = Math.min(first, second);
+                length = Math.abs(first - second);
+                if (length <= 16) {
+                    break;
                 }
             }
+            foreignBytesToLongs();
+            foreignLongsToBytes();
+            charsToLong();
         }
+    }
+
+    @Setup(Level.Iteration)
+    public void setUp() {
+        var random = RandomGenerator.getDefault();
+        bytes = new byte[random.nextInt(64)];
+        random.nextBytes(bytes);
+        chars = new String(bytes, StandardCharsets.US_ASCII).toCharArray();
+        while (true) {
+            int first = random.nextInt(bytes.length);
+            int second = random.nextInt(bytes.length);
+            offset = Math.min(first, second);
+            length = Math.abs(first - second);
+            if (length <= 16) {
+                break;
+            }
+        }
+    }
+
+//    @Benchmark
+    public void foreignBytesToLongs() {
+        var temp = compress(bytes, offset, length);
+        firstHalf = temp.firstHalf();
+        secondHalf = temp.secondHalf();
+    }
+
+//    @Benchmark
+    public void foreignLongsToBytes() {
+        uncompress(bytes, offset, length, firstHalf, secondHalf);
+    }
+
+    @Benchmark
+    public SmallStringCharData charsToLong() {
+        return compress(chars, offset, length);
+    }
+
+    private static SmallString compress(byte[] value, int offset, int length) {
+        Objects.checkFromIndexSize(offset, length, value.length);
+        final long firstHalf, secondHalf;
+        if (length == Long.BYTES * 2) {
+            firstHalf = (long)BYTE_ARRAY_AS_LONGS.get(value, offset);
+            secondHalf = (long)BYTE_ARRAY_AS_LONGS.get(value, offset + Long.BYTES);
+        } else {
+            long temp = 0;
+            int tempOffset = offset + length;
+            if ((length & Byte.BYTES) != 0) {
+                tempOffset--;
+                temp = value[tempOffset] & Byte.toUnsignedLong((byte)-1);
+            }
+            if ((length & Short.BYTES) != 0) {
+                tempOffset -= Short.BYTES;
+                temp = (temp << Short.SIZE) | ((short)BYTE_ARRAY_AS_SHORTS.get(value, tempOffset) & Short.toUnsignedLong((short)-1));
+            }
+            if ((length & Integer.BYTES) != 0) {
+                tempOffset -= Integer.BYTES;
+                temp = (temp << Integer.SIZE) | ((int)BYTE_ARRAY_AS_INTS.get(value, tempOffset) & Integer.toUnsignedLong(-1));
+            }
+            if ((length & Long.BYTES) != 0) {
+                firstHalf = (long)BYTE_ARRAY_AS_LONGS.get(value, offset);
+                secondHalf = temp;
+            } else {
+                firstHalf = temp;
+                secondHalf = 0;
+            }
+        }
+        return new SmallString(firstHalf, secondHalf);
+    }
+
+    private static void uncompress(byte[] dst, int offset, int length, long firstHalf, long secondHalf) {
+        Objects.checkFromIndexSize(offset, length, dst.length);
+        if (length == Long.BYTES * 2) {
+            BYTE_ARRAY_AS_LONGS.set(dst, offset, firstHalf);
+            BYTE_ARRAY_AS_LONGS.set(dst, offset + Long.BYTES, secondHalf);
+        } else {
+            long temp = firstHalf;
+            int tempOffset = offset;
+            if ((length & Long.BYTES) != 0) {
+                BYTE_ARRAY_AS_LONGS.set(dst, tempOffset, temp);
+                temp = secondHalf;
+                tempOffset += Long.BYTES;
+            }
+            if ((length & Integer.BYTES) != 0) {
+                BYTE_ARRAY_AS_INTS.set(dst, tempOffset, (int)temp);
+                temp >>>= Integer.SIZE;
+                tempOffset += Integer.BYTES;
+            }
+            if ((length & Short.BYTES) != 0) {
+                BYTE_ARRAY_AS_SHORTS.set(dst, tempOffset, (short)temp);
+                temp >>>= Short.SIZE;
+                tempOffset += Short.BYTES;
+            }
+            if ((length & Byte.BYTES) != 0) {
+                dst[tempOffset] = (byte)temp;
+            }
+        }
+    }
+
+    private static SmallStringCharData compress(char[] value, int offset, int length) {
+        offset *= Short.BYTES;
+        final long firstQuarter, secondQuarter, thirdQuarter, fourthQuarter;
+        if (length == Long.BYTES * 2) {
+            firstQuarter = UNSAFE.getLong(value, Unsafe.ARRAY_CHAR_BASE_OFFSET + offset);
+            secondQuarter = UNSAFE.getLong(value, Unsafe.ARRAY_CHAR_BASE_OFFSET + offset + Long.BYTES);
+            thirdQuarter = UNSAFE.getLong(value, Unsafe.ARRAY_CHAR_BASE_OFFSET + offset + Long.BYTES * 2);
+            fourthQuarter = UNSAFE.getLong(value, Unsafe.ARRAY_CHAR_BASE_OFFSET + offset + Long.BYTES * 3);
+        } else {
+            long temp = 0;
+            int tempOffset = offset + length * Short.BYTES;
+            if ((length & Byte.BYTES) != 0) {
+                tempOffset -= Short.BYTES;
+                temp = Short.toUnsignedLong(UNSAFE.getShort(value, Unsafe.ARRAY_CHAR_BASE_OFFSET + tempOffset));
+            }
+            if ((length & Short.BYTES) != 0) {
+                tempOffset -= Integer.BYTES;
+                temp = (temp << Integer.SIZE) | Integer.toUnsignedLong(UNSAFE.getInt(value, Unsafe.ARRAY_CHAR_BASE_OFFSET + tempOffset));
+            }
+            final long first, second;
+            if ((length & Integer.BYTES) != 0) {
+                tempOffset -= Long.BYTES;
+                first = UNSAFE.getLong(value, Unsafe.ARRAY_CHAR_BASE_OFFSET + tempOffset);
+                second = temp;
+            } else {
+                first = temp;
+                second = 0;
+            }
+            if ((length & Long.BYTES) != 0) {
+                firstQuarter = UNSAFE.getLong(value, Unsafe.ARRAY_CHAR_BASE_OFFSET + offset);
+                secondQuarter = UNSAFE.getLong(value, Unsafe.ARRAY_CHAR_BASE_OFFSET + offset + Long.BYTES);
+                thirdQuarter = first;
+                fourthQuarter = second;
+            } else {
+                firstQuarter = first;
+                secondQuarter = second;
+                thirdQuarter = 0;
+                fourthQuarter = 0;
+            }
+        }
+        return new SmallStringCharData(firstQuarter, secondQuarter, thirdQuarter, fourthQuarter);
     }
 }

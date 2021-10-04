@@ -39,7 +39,7 @@ public class ConstructorTest {
     @ParameterizedTest
     @MethodSource
     public void charArray(char[] data) {
-        assertEquals(new InlineString(data).toString(), new String(data));
+        assertEquals(new String(data), new InlineString(data).toString());
     }
 
     record CharArrayIntInt(char[] value, int offset, int count) {}

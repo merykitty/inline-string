@@ -2,6 +2,7 @@ package io.github.merykitty.inlinestring.benchmark;
 
 import io.github.merykitty.inlinestring.InlineString;
 import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.concurrent.TimeUnit;
 import java.util.random.RandomGenerator;
@@ -12,14 +13,14 @@ import java.util.random.RandomGenerator;
 @Fork(value = 1)
 @Warmup(iterations = 5)
 @Measurement(iterations = 5)
-public class GetCharsBenchmark {
+public class ConstructorCharArrayBenchmark {
     @Param({"Hello world!", "This is an example of a Latin1 long string", "Đây là một UTF16 String"})
     private String param;
 
-    String str;
-    InlineString inlStr;
-    char[] result = new char[256];
-    int srcBegin, srcEnd;
+    char[] charArray;
+
+    String dumpStr;
+    InlineString dumpInlStr;
 
     @Setup(Level.Trial)
     public void warmup() {
@@ -30,34 +31,23 @@ public class GetCharsBenchmark {
             for (int j = 0; j < length; j++) {
                 array[j] = (char)random.nextInt('a', 'z');
             }
-            str = new String(array);
-            inlStr = new InlineString(array);
-            int first = random.nextInt(length);
-            int second = random.nextInt(length);
-            srcBegin = Math.min(first, second);
-            srcEnd = Math.max(first, second);
-            str();
-            inlStr();
+            dumpStr = new String(array);
+            dumpInlStr = new InlineString(array);
         }
     }
 
     @Setup(Level.Trial)
-    public void setUp() {
-        this.str = new String(param);
-        this.inlStr = new InlineString(param);
-        int first = RandomGenerator.getDefault().nextInt(param.length());
-        int second = RandomGenerator.getDefault().nextInt(param.length());
-        srcBegin = Math.min(first, second);
-        srcEnd = Math.max(first, second);
+    public void charArray() {
+        charArray = param.toCharArray();
     }
 
     @Benchmark
-    public void str() {
-        str.getChars(srcBegin, srcEnd, result, 3);
+    public String charArrayStr() {
+        return new String(charArray);
     }
 
     @Benchmark
-    public void inlStr() {
-        inlStr.getChars(srcBegin, srcEnd, result, 3);
+    public InlineString charArrayInl() {
+        return new InlineString(charArray);
     }
 }
