@@ -62,8 +62,9 @@
                 <version>${maven-compiler-plugin.version}</version>
                 <configuration>
                     <compilerArgs>
-                        <arg>--add-modules=jdk.incubator.foreign</arg>
                         <arg>--add-modules=jdk.incubator.vector</arg>
+                        <arg>--add-exports</arg>
+                        <arg>java.base/jdk.internal.misc=inlinestring</arg>
                     </compilerArgs>
                 </configuration>
             </plugin>
@@ -74,7 +75,7 @@
                 <version>${maven-surefile-plugin.version}</version>
                 <configuration>
                     <trimStackTrace>false</trimStackTrace>
-                    <argLine>--add-opens java.base/java.lang=inlinestring</argLine>
+                    <argLine>-ea --add-opens java.base/java.lang=inlinestring --add-exports java.base/jdk.internal.misc=inlinestring</argLine>
                 </configuration>
             </plugin>
 
@@ -95,15 +96,16 @@
                                 <argument>-cp</argument>
                                 <modulepath/>
                                 <argument>--add-modules=jdk.incubator.vector</argument>
-                                <argument>--add-modules=jdk.incubator.foreign</argument>
                                 <argument>--add-opens</argument>
                                 <argument>java.base/java.lang=ALL-UNNAMED</argument>
+                                <argument>--add-exports</argument>
+                                <argument>java.base/jdk.internal.misc=ALL-UNNAMED</argument>
                                 <argument>-XX:+UnlockDiagnosticVMOptions</argument>
 <!--                                <argument>-XX:+PrintCompilation</argument>-->
-<!--                                <argument>-XX:CompileCommand=print,*InlineString.compareTo</argument>-->
+                                <argument>-XX:CompileCommand=print,*BasicBenchmark.test</argument>
                                 <argument>-Djmh.blackhole.mode=COMPILER</argument>
                                 <argument>io.github.merykitty.inlinestring.benchmark.BenchmarkEntry</argument>
-                                <argument>CompareToBenchmark</argument>
+                                <argument>BasicBenchmark</argument>
                                 <argument>-prof</argument>
                                 <argument>gc</argument>
                             </arguments>

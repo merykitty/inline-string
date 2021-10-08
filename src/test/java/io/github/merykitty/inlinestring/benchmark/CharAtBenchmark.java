@@ -12,14 +12,16 @@ import java.util.random.RandomGenerator;
 @Fork(value = 1)
 @Warmup(iterations = 5)
 @Measurement(iterations = 5)
-public class GetCharsBenchmark {
+public class CharAtBenchmark {
     @Param({"Hello world!", "This is an example of a Latin1 long string", "Đây là một UTF16 String"})
     private String param;
 
     String str;
     InlineString inlStr;
-    char[] result = new char[256];
-    int srcBegin, srcEnd, dstBegin;
+    int index;
+
+    int dumpStr;
+    int dumpInlStr;
 
     @Setup(Level.Trial)
     public void warmup() {
@@ -30,34 +32,35 @@ public class GetCharsBenchmark {
             for (int j = 0; j < length; j++) {
                 array[j] = (char)random.nextInt('a', 'z');
             }
+            index = random.nextInt(length);
             str = new String(array);
             inlStr = new InlineString(array);
-            int first = random.nextInt(length);
-            int second = random.nextInt(length);
-            srcBegin = Math.min(first, second);
-            srcEnd = Math.max(first, second);
-            dstBegin = random.nextInt(10);
-            str();
-            inlStr();
+            dumpStr = str();
+            dumpInlStr = inlStr();
         }
     }
 
     @Setup(Level.Iteration)
-    public void setUp() {
-        this.str = new String(param);
-        this.inlStr = new InlineString(param);
-        srcBegin = 3;
-        srcEnd = 10;
-        dstBegin = 3;
+    public void setup() {
+        str = new String(param);
+        inlStr = new InlineString(param);
+        index = 0;
     }
 
     @Benchmark
-    public void str() {
-        str.getChars(srcBegin, srcEnd, result, dstBegin);
+    public int str() {
+        if (++index == str.length()) {
+            index = 0;
+        }
+        return str.charAt(index);
     }
 
     @Benchmark
-    public void inlStr() {
-        inlStr.getChars(srcBegin, srcEnd, result, dstBegin);
+    public int inlStr() {
+        if (++index == inlStr.length()) {
+            index = 0;
+        }
+        return inlStr.charAt(index);
     }
+
 }

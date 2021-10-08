@@ -15,25 +15,12 @@ import static java.lang.invoke.MethodType.methodType;
 
 final class StringLatin1 {
     public static char charAt(byte[] value, int index) {
-        try {
-            return (char) CHAR_AT.invokeExact(value, index);
-        } catch (RuntimeException | Error e) {
-            throw e;
-        } catch (Throwable e) {
-            // Can't reach here
-            throw new AssertionError(e);
-        }
+        InlineString.checkIndex(index, value.length);
+        return (char)(value[index] & 0xff);
     }
 
     public static boolean canEncode(int cp) {
-        try {
-            return (boolean) CAN_ENCODE.invokeExact(cp);
-        } catch (RuntimeException | Error e) {
-            throw e;
-        } catch (Throwable e) {
-            // Can't reach here
-            throw new AssertionError(e);
-        }
+        return cp < 0x100;
     }
 
     public static char[] toChars(byte[] value) {
@@ -202,14 +189,14 @@ final class StringLatin1 {
             }
             if (i < len) {
                 if (canEncode(newChar)) {
-                    byte[] buf = StringConcatHelper.newArray(len);
+                    byte[] buf = StringConcatHelper.newArray(len, Utils.LATIN1);
                     System.arraycopy(value, 0, buf, 0, i);
                     while (i < len) {
                         byte c = value[i];
                         buf[i] = (c == (byte)oldChar) ? (byte)newChar : c;
                         i++;
                     }
-                    return new InlineString(buf, Utils.LATIN1);
+                    return new InlineString(buf, len, Utils.LATIN1, 0);
                 } else {
                     byte[] buf = StringUTF16.newBytesFor(len);
                     // inflate from latin1 to UTF16
@@ -219,11 +206,11 @@ final class StringLatin1 {
                         StringUTF16.putChar(buf, i, (c == oldChar) ? newChar : c);
                         i++;
                     }
-                    return new InlineString(buf, Utils.UTF16);
+                    return new InlineString(buf, len, Utils.UTF16, 0);
                 }
             }
         }
-        return new InlineString(value, Utils.LATIN1); // for string to return this;
+        return new InlineString(value, value.length, Utils.LATIN1, 0);
     }
 
     public static InlineString replace(byte[] value, int valLen,
@@ -231,7 +218,7 @@ final class StringLatin1 {
         assert targLen > 0;
         int i, j, p = 0;
         if (valLen == 0 || (i = indexOf(value, valLen, targ, targLen, 0)) < 0) {
-            return new InlineString(value, Utils.LATIN1); // for string to return this;
+            return new InlineString(value, Utils.LATIN1);
         }
 
         // find and store indices of substrings to replace
@@ -251,13 +238,13 @@ final class StringLatin1 {
             resultLen = Math.addExact(valLen,
                     Math.multiplyExact(++p, replLen - targLen));
         } catch (ArithmeticException ignored) {
-            throw new OutOfMemoryError("Required length exceeds implementation limit");
+            throw new OutOfMemoryError("Required index exceeds implementation limit");
         }
         if (resultLen == 0) {
             return InlineString.EMPTY_STRING;
         }
 
-        byte[] result = StringConcatHelper.newArray(resultLen);
+        byte[] result = StringConcatHelper.newArray(resultLen, Utils.LATIN1);
         int posFrom = 0, posTo = 0;
         for (int q = 0; q < p; ++q) {
             int nextPos = pos[q];
@@ -414,11 +401,12 @@ final class StringLatin1 {
     }
 
     public static InlineString newString(byte[] val, int index, int len) {
-        if (len == 0) {
-            return InlineString.EMPTY_STRING;
+        if (StringCompressed.compressible(len)) {
+            var data = StringCompressed.compress(val, index, len);
+            return new InlineString(InlineString.SMALL_STRING_VALUE, len, data.firstHalf(), data.secondHalf());
+        } else {
+            return new InlineString(Arrays.copyOfRange(val, index, index + len), len, Utils.LATIN1, 0);
         }
-        return new InlineString(Arrays.copyOfRange(val, index, index + len),
-                Utils.LATIN1);
     }
 
     public static void inflate(byte[] src, int srcOff, char[] dst, int dstOff, int len) {

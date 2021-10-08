@@ -21,7 +21,7 @@ public class RepeatBenchmark {
     String str;
     InlineString inlStr;
 
-    @Setup(Level.Trial)
+    @Setup(Level.Iteration)
     public void setUp() {
         this.str = new String(param);
         this.inlStr = new InlineString(param);

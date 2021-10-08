@@ -1,7 +1,10 @@
 package io.github.merykitty.inlinestring.internal;
 
+import io.github.merykitty.inlinestring.InlineString;
 import jdk.incubator.vector.VectorSpecies;
 
+import java.lang.constant.ClassDesc;
+import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.nio.ByteOrder;
@@ -15,6 +18,8 @@ public final class Utils {
     public static final boolean COMPACT_STRINGS;
     public static final byte LATIN1;
     public static final byte UTF16;
+    public static final DirectMethodHandleDesc INLINE_STRING_CONSTRUCTOR_STRING;
+    public static final ClassDesc INLINE_STRING_CLASS;
 
     public static String newStringValueCoder(byte[] value, byte coder) {
         try {
@@ -149,15 +154,19 @@ public final class Utils {
             STRING_CHECK_BOUNDS_BEGIN_END = lookup.findStatic(String.class, "checkBoundsBeginEnd", methodType(Void.TYPE,
                     Integer.TYPE, Integer.TYPE, Integer.TYPE));
 
-            Supplier<Boolean> compressedCalculation = () -> {
-                try {
-                    var preferredSpecies = VectorSpecies.ofPreferred(Byte.TYPE);
-                    return ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN && COMPACT_STRINGS && preferredSpecies.vectorBitSize() >= 256;
-                } catch (Exception e) {
-                    return false;
-                }
-            };
-            COMPRESSED_STRINGS = compressedCalculation.get();
+            var temp = false;
+            try {
+                var preferredSpecies = VectorSpecies.ofPreferred(Byte.TYPE);
+                temp = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN && COMPACT_STRINGS && preferredSpecies.vectorBitSize() >= 256;
+            } catch (Exception e) {}
+            COMPRESSED_STRINGS = temp;
+
+            INLINE_STRING_CONSTRUCTOR_STRING = (DirectMethodHandleDesc) MethodHandles.lookup().findStatic(InlineString.class,
+                    "<init>",
+                    methodType(InlineString.class.asValueType(), String.class))
+                    .describeConstable()
+                    .get();
+            INLINE_STRING_CLASS = InlineString.class.describeConstable().get();
         } catch (Throwable e) {
             throw new AssertionError(e);
         }

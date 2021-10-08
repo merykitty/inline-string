@@ -36,7 +36,7 @@ public class ConstructorCharArrayBenchmark {
         }
     }
 
-    @Setup(Level.Trial)
+    @Setup(Level.Iteration)
     public void charArray() {
         charArray = param.toCharArray();
     }

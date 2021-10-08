@@ -1,6 +1,7 @@
 package io.github.merykitty.inlinestring.benchmark;
 
 import io.github.merykitty.inlinestring.InlineString;
+import io.github.merykitty.inlinestring.internal.SmallStringByteData;
 import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SegmentAllocator;
@@ -24,7 +25,7 @@ import java.util.random.RandomGenerator;
 @Fork(value = 1)
 @Warmup(iterations = 5)
 @Measurement(iterations = 5)
-public class GCBenchmark {
+public class CompressBenchmark {
     byte[] bytes;
     char[] chars;
     int length;
@@ -70,8 +71,8 @@ public class GCBenchmark {
                     break;
                 }
             }
-            foreignBytesToLongs();
-            foreignLongsToBytes();
+            bytesToLongs();
+            longsToBytes();
             charsToLong();
         }
     }
@@ -93,46 +94,45 @@ public class GCBenchmark {
         }
     }
 
-//    @Benchmark
-    public void foreignBytesToLongs() {
+    @Benchmark
+    public void bytesToLongs() {
         var temp = compress(bytes, offset, length);
         firstHalf = temp.firstHalf();
         secondHalf = temp.secondHalf();
     }
 
-//    @Benchmark
-    public void foreignLongsToBytes() {
+    @Benchmark
+    public void longsToBytes() {
         uncompress(bytes, offset, length, firstHalf, secondHalf);
     }
 
-    @Benchmark
+//    @Benchmark
     public SmallStringCharData charsToLong() {
         return compress(chars, offset, length);
     }
 
     private static SmallString compress(byte[] value, int offset, int length) {
-        Objects.checkFromIndexSize(offset, length, value.length);
         final long firstHalf, secondHalf;
-        if (length == Long.BYTES * 2) {
-            firstHalf = (long)BYTE_ARRAY_AS_LONGS.get(value, offset);
-            secondHalf = (long)BYTE_ARRAY_AS_LONGS.get(value, offset + Long.BYTES);
+        if (length >= Long.BYTES * 2) {
+            firstHalf = UNSAFE.getLong(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + offset);
+            secondHalf = UNSAFE.getLong(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + offset + Long.BYTES);
         } else {
             long temp = 0;
             int tempOffset = offset + length;
             if ((length & Byte.BYTES) != 0) {
                 tempOffset--;
-                temp = value[tempOffset] & Byte.toUnsignedLong((byte)-1);
+                temp = Byte.toUnsignedLong(UNSAFE.getByte(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + tempOffset));
             }
             if ((length & Short.BYTES) != 0) {
                 tempOffset -= Short.BYTES;
-                temp = (temp << Short.SIZE) | ((short)BYTE_ARRAY_AS_SHORTS.get(value, tempOffset) & Short.toUnsignedLong((short)-1));
+                temp = (temp << Short.SIZE) | Short.toUnsignedLong(UNSAFE.getShort(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + tempOffset));
             }
             if ((length & Integer.BYTES) != 0) {
                 tempOffset -= Integer.BYTES;
-                temp = (temp << Integer.SIZE) | ((int)BYTE_ARRAY_AS_INTS.get(value, tempOffset) & Integer.toUnsignedLong(-1));
+                temp = (temp << Integer.SIZE) | Integer.toUnsignedLong(UNSAFE.getInt(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + tempOffset));
             }
             if ((length & Long.BYTES) != 0) {
-                firstHalf = (long)BYTE_ARRAY_AS_LONGS.get(value, offset);
+                firstHalf = UNSAFE.getLong(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + offset);
                 secondHalf = temp;
             } else {
                 firstHalf = temp;

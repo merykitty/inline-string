@@ -2,6 +2,10 @@ package io.github.merykitty.inlinestring;
 
 import io.github.merykitty.inlinestring.internal.ArraysSupport;
 import io.github.merykitty.inlinestring.internal.Utils;
+import jdk.incubator.vector.ByteVector;
+import jdk.incubator.vector.LongVector;
+import jdk.incubator.vector.ShortVector;
+import jdk.incubator.vector.VectorOperators;
 
 import java.lang.invoke.MethodHandle;
 import java.util.Arrays;
@@ -326,34 +330,64 @@ final class StringUTF16 {
 
     public static InlineString replace(byte[] value, char oldChar, char newChar) {
         int len = value.length >> 1;
-        int i = -1;
-        while (++i < len) {
-            if (getChar(value, i) == oldChar) {
-                break;
-            }
-        }
-        if (i < len) {
-            byte[] buf = new byte[value.length];
-            for (int j = 0; j < i; j++) {
-                putChar(buf, j, getChar(value, j)); // TBD:arraycopy?
-            }
-            while (i < len) {
-                char c = getChar(value, i);
-                putChar(buf, i, c == oldChar ? newChar : c);
-                i++;
-            }
-            // Check if we should try to compress to latin1
-            if (Utils.COMPACT_STRINGS &&
-                    !StringLatin1.canEncode(oldChar) &&
-                    StringLatin1.canEncode(newChar)) {
-                byte[] val = compress(buf, 0, len);
-                if (val != null) {
-                    return new InlineString(val, Utils.LATIN1);
+        boolean needReplace = false, latin1Encodeable = Utils.COMPACT_STRINGS;
+        for (int i = 0; i < len; i++) {
+            char c = getChar(value, i);
+            if (c == oldChar) {
+                needReplace = true;
+                if (!latin1Encodeable) {
+                    break;
+                }
+            } else if (Utils.COMPACT_STRINGS && !StringLatin1.canEncode(c)) {
+                latin1Encodeable = false;
+                if (needReplace) {
+                    break;
                 }
             }
-            return new InlineString(buf, Utils.UTF16);
         }
-        return new InlineString(value, Utils.UTF16);
+        if (needReplace) {
+            if (Utils.COMPACT_STRINGS && latin1Encodeable && StringLatin1.canEncode(newChar)) {
+                if (StringCompressed.compressible(len)) {
+                    var inflatedFirstData = StringCompressed.compress(value, 0, len * Short.BYTES);
+                    long firstHalf = LongVector.zero(LongVector.SPECIES_128)
+                            .withLane(0, inflatedFirstData.firstHalf())
+                            .withLane(1, inflatedFirstData.secondHalf())
+                            .reinterpretAsShorts()
+                            .castShape(ByteVector.SPECIES_128, 0)
+                            .reinterpretAsLongs()
+                            .lane(0);
+                    long secondHalf = 0;
+                    if (len > Long.BYTES) {
+                        var inflatedSecondData = StringCompressed.compress(value,
+                                Long.BYTES * Short.BYTES, (len - Long.BYTES) * Short.BYTES);
+                        secondHalf = LongVector.zero(LongVector.SPECIES_128)
+                                .withLane(0, inflatedSecondData.firstHalf())
+                                .withLane(1, inflatedSecondData.secondHalf())
+                                .reinterpretAsShorts()
+                                .castShape(ByteVector.SPECIES_128, 0)
+                                .reinterpretAsLongs()
+                                .lane(0);
+                    }
+                    return new InlineString(InlineString.SMALL_STRING_VALUE, len, firstHalf, secondHalf);
+                } else {
+                    byte[] buf = StringConcatHelper.newArray(len, Utils.LATIN1);
+                    for (int i = 0; i < len; i++) {
+                        char c = getChar(value, i);
+                        buf[i] = (byte)(c == oldChar ? newChar : c);
+                    }
+                    return new InlineString(buf, len, Utils.LATIN1, 0);
+                }
+            } else {
+                byte[] buf = newBytesFor(len);
+                for (int i = 0; i < len; i++) {
+                    char c = getChar(value, i);
+                    putChar(buf, i, c == oldChar ? newChar : c);
+                }
+                return new InlineString(buf, len, Utils.UTF16, 0);
+            }
+        } else {
+            return new InlineString(value, len, Utils.UTF16, 0);
+        }
     }
 
     public static InlineString replace(byte[] value, int valLen, boolean valLat1,
@@ -420,7 +454,7 @@ final class StringUTF16 {
             resultLen = Math.addExact(valLen,
                     Math.multiplyExact(++p, replLen - targLen));
         } catch (ArithmeticException ignored) {
-            throw new OutOfMemoryError("Required length exceeds implementation limit");
+            throw new OutOfMemoryError("Required index exceeds implementation limit");
         }
         if (resultLen == 0) {
             return InlineString.EMPTY_STRING;
@@ -585,17 +619,44 @@ final class StringUTF16 {
     }
 
     public static InlineString newString(byte[] val, int index, int len) {
-        if (len == 0) {
-            return InlineString.EMPTY_STRING;
-        }
         if (Utils.COMPACT_STRINGS) {
-            byte[] buf = compress(val, index, len);
-            if (buf != null) {
-                return new InlineString(buf, Utils.LATIN1);
+            if (StringCompressed.compressible(len)) {
+                var dataFirstCompressed = StringCompressed.compress(val,
+                        index * Short.BYTES, len * Short.BYTES);
+                var dataFirst = LongVector.zero(LongVector.SPECIES_128)
+                        .withLane(0, dataFirstCompressed.firstHalf())
+                        .withLane(1, dataFirstCompressed.secondHalf())
+                        .reinterpretAsShorts();
+                if (dataFirst.compare(VectorOperators.LT, (short)0x100).allTrue()) {
+                    long firstHalf = dataFirst.castShape(ByteVector.SPECIES_128, 0)
+                            .reinterpretAsLongs()
+                            .lane(0);
+                    if (len > Long.BYTES) {
+                        var dataSecondCompressed = StringCompressed.compress(val,
+                                (index + Long.BYTES) * Short.BYTES, (len - Long.BYTES) * Short.BYTES);
+                        var dataSecond = LongVector.zero(LongVector.SPECIES_128)
+                                .withLane(0, dataSecondCompressed.firstHalf())
+                                .withLane(1, dataSecondCompressed.secondHalf())
+                                .reinterpretAsShorts();
+                        if (dataSecond.compare(VectorOperators.LT, (short)0x100).allTrue()) {
+                            long secondHalf = dataSecond.castShape(ByteVector.SPECIES_128, 0)
+                                    .reinterpretAsLongs()
+                                    .lane(0);
+                            return new InlineString(InlineString.SMALL_STRING_VALUE, len, firstHalf, secondHalf);
+                        }
+                    } else {
+                        return new InlineString(InlineString.SMALL_STRING_VALUE, len, firstHalf, 0);
+                    }
+                }
+            } else {
+                byte[] buf = compress(val, index, len);
+                if (buf != null) {
+                    return new InlineString(buf, len, Utils.LATIN1, 0);
+                }
             }
         }
         int last = index + len;
-        return new InlineString(Arrays.copyOfRange(val, index << 1, last << 1), Utils.UTF16);
+        return new InlineString(Arrays.copyOfRange(val, index << 1, last << 1), len, Utils.UTF16, 0);
     }
 
     public static boolean contentEquals(byte[] v1, byte[] v2, int len) {

@@ -28,6 +28,11 @@ public class Utils {
 
     public static <T, E extends Exception> void assertSimilarExecutions(
             SupplierExce<T, E> expected, SupplierExce<T, E> actual) {
+        assertSimilarExecutions(expected, actual, "");
+    }
+
+    public static <T, E extends Exception> void assertSimilarExecutions(
+            SupplierExce<T, E> expected, SupplierExce<T, E> actual, String message) {
         Exception expectedExcep = null;
         Exception actualExcep = null;
         T expectedObj = null;
@@ -43,17 +48,17 @@ public class Utils {
             actualExcep = e;
         }
         if (expectedExcep != null) {
-            assertEquals(expectedExcep.getClass(), actualExcep.getClass());
-            assertEquals(expectedExcep.getMessage(), actualExcep.getMessage());
+            assertEquals(expectedExcep.getClass(), actualExcep.getClass(), message);
+            assertEquals(expectedExcep.getMessage(), actualExcep.getMessage(), message);
         } else {
             if (expectedObj instanceof byte[] array) {
-                assertArrayEquals(array, (byte[]) actualObj);
+                assertArrayEquals(array, (byte[]) actualObj, message);
             } else if (expectedObj instanceof char[] array) {
-                assertArrayEquals(array, (char[]) actualObj);
+                assertArrayEquals(array, (char[]) actualObj, message);
             } else if (expectedObj instanceof int[] array) {
-                assertArrayEquals(array, (int[]) actualObj);
+                assertArrayEquals(array, (int[]) actualObj, message);
             } else {
-                assertEquals(expectedObj, actualObj);
+                assertEquals(expectedObj, actualObj, message);
             }
         }
     }

@@ -12,19 +12,22 @@ import java.util.random.RandomGenerator;
 @Fork(value = 1)
 @Warmup(iterations = 5)
 @Measurement(iterations = 5)
-public class GetCharsBenchmark {
+public class IndexOfBenchmark {
     @Param({"Hello world!", "This is an example of a Latin1 long string", "Đây là một UTF16 String"})
     private String param;
 
     String str;
     InlineString inlStr;
-    char[] result = new char[256];
-    int srcBegin, srcEnd, dstBegin;
+    int ch;
+    int fromIndex;
+
+    int dumpStr;
+    int dumpInlStr;
 
     @Setup(Level.Trial)
     public void warmup() {
+        var random = RandomGenerator.getDefault();
         for (int i = 0; i < 100_000; i++) {
-            var random = RandomGenerator.getDefault();
             int length = random.nextInt(16 * 2);
             char[] array = new char[length];
             for (int j = 0; j < length; j++) {
@@ -32,32 +35,28 @@ public class GetCharsBenchmark {
             }
             str = new String(array);
             inlStr = new InlineString(array);
-            int first = random.nextInt(length);
-            int second = random.nextInt(length);
-            srcBegin = Math.min(first, second);
-            srcEnd = Math.max(first, second);
-            dstBegin = random.nextInt(10);
-            str();
-            inlStr();
+            ch = random.nextInt('a', 'z');
+            fromIndex = random.nextInt(16);
+            dumpStr = str.indexOf(ch, fromIndex);
+            dumpInlStr = str.indexOf(ch, fromIndex);
         }
     }
 
     @Setup(Level.Iteration)
-    public void setUp() {
-        this.str = new String(param);
-        this.inlStr = new InlineString(param);
-        srcBegin = 3;
-        srcEnd = 10;
-        dstBegin = 3;
+    public void setup() {
+        str = new String(param);
+        inlStr = new InlineString(param);
+        ch = 'o';
+        fromIndex = 3;
     }
 
     @Benchmark
     public void str() {
-        str.getChars(srcBegin, srcEnd, result, dstBegin);
+        dumpStr = str.indexOf(ch, fromIndex);
     }
 
     @Benchmark
     public void inlStr() {
-        inlStr.getChars(srcBegin, srcEnd, result, dstBegin);
+        dumpInlStr = inlStr.indexOf(ch, fromIndex);
     }
 }

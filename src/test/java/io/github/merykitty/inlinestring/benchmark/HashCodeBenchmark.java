@@ -4,6 +4,7 @@ import io.github.merykitty.inlinestring.InlineString;
 import org.openjdk.jmh.annotations.*;
 
 import java.util.concurrent.TimeUnit;
+import java.util.random.RandomGenerator;
 
 @BenchmarkMode(Mode.AverageTime)
 @State(Scope.Benchmark)
@@ -18,19 +19,30 @@ public class HashCodeBenchmark {
     String str;
     InlineString inlStr;
 
+    int dumpStr;
+    int dumpInlStr;
+
     @Setup(Level.Trial)
-    public void setUp() {
-        this.str = new String(param);
-        this.inlStr = new InlineString(param);
+    public void warmup() {
+        for (int i = 0; i < 100_000; i++) {
+            var random = RandomGenerator.getDefault();
+            int length = random.nextInt(16 * 2);
+            char[] array = new char[length];
+            for (int j = 0; j < length; j++) {
+                array[j] = (char)random.nextInt('a', 'z');
+            }
+            dumpStr = new String(array).hashCode();
+            dumpInlStr = new InlineString(array).hashCode();
+        }
     }
 
     @Benchmark
     public int str() {
-        return str.hashCode();
+        return new String(param).hashCode();
     }
 
     @Benchmark
     public int inlStr() {
-        return inlStr.hashCode();
+        return new InlineString(param).hashCode();
     }
 }

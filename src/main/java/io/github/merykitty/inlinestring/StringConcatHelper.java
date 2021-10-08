@@ -6,13 +6,17 @@ import java.lang.invoke.MethodHandle;
 import static java.lang.invoke.MethodType.methodType;
 
 final class StringConcatHelper {
-    public static long mix(long lengthCoder, InlineString value) {
-        lengthCoder += value.length();
-        if (value.coder() == Utils.UTF16) {
-            lengthCoder |= UTF16;
+    @__primitive__
+    record IndexCoder(int index, byte coder) {}
+
+    public static IndexCoder mix(IndexCoder current, InlineString value) {
+        try {
+            return new IndexCoder(Math.addExact(current.index(), value.length()), (byte)(current.coder() | value.coder()));
+        } catch (ArithmeticException e) {
+            throw new OutOfMemoryError("Overflow: String index out of range");
         }
-        return checkOverflow(lengthCoder);
     }
+
     public static InlineString simpleConcat(InlineString first, InlineString second) {
         if (first.isEmpty()) {
             return second;
@@ -20,21 +24,26 @@ final class StringConcatHelper {
         if (second.isEmpty()) {
             return first;
         }
-        // start "mixing" in length and coder or arguments, order is not
+        // start "mixing" in index and coder or arguments, order is not
         // important
-        long indexCoder = mix(initialCoder(), first);
+        var indexCoder = mix(initialCoder(), first);
         indexCoder = mix(indexCoder, second);
-        byte[] buf = newArray(indexCoder);
-        // prepend each argument in reverse order, since we prepending
-        // from the end of the byte array
-        indexCoder = prepend(indexCoder, buf, second);
-        indexCoder = prepend(indexCoder, buf, first);
-        return newString(buf, indexCoder);
+        if (StringCompressed.compressible(indexCoder.index(), indexCoder.coder())) {
+            // first and second are both compressed
+            return StringCompressed.concat(first, second);
+        } else {
+            byte[] buf = newArray(indexCoder.index(), indexCoder.coder());
+            // prepend each argument in reverse order, since we prepending
+            // from the end of the byte array
+            indexCoder = prepend(indexCoder, buf, second);
+            indexCoder = prepend(indexCoder, buf, first);
+            return newString(buf, indexCoder);
+        }
     }
 
-    public static byte[] newArray(long indexCoder) {
+    public static byte[] newArray(int length, byte coder) {
         try {
-            return (byte[]) NEW_ARRAY.invokeExact(indexCoder);
+            return (byte[]) NEW_ARRAY.invokeExact(((long)coder << Integer.SIZE) | length);
         } catch (RuntimeException | Error e) {
             throw e;
         } catch (Throwable e) {
@@ -42,16 +51,7 @@ final class StringConcatHelper {
         }
     }
 
-    private static final long LATIN1 = (long)Utils.LATIN1 << 32;
-    private static final long UTF16 = (long)Utils.UTF16 << 32;
     private static final MethodHandle NEW_ARRAY;
-
-    private static long checkOverflow(long lengthCoder) {
-        if ((int)lengthCoder >= 0) {
-            return lengthCoder;
-        }
-        throw new OutOfMemoryError("Overflow: String length out of range");
-    }
 
     /**
      * Prepends the stringly representation of String index into buffer,
@@ -63,39 +63,29 @@ final class StringConcatHelper {
      * @param value      String index to encode
      * @return           updated index (coder index retained)
      */
-    private static long prepend(long indexCoder, byte[] buf, InlineString value) {
-        indexCoder -= value.length();
-        if (indexCoder < UTF16) {
-            value.getBytes(buf, (int)indexCoder, Utils.LATIN1);
-        } else {
-            value.getBytes(buf, (int)indexCoder, Utils.UTF16);
-        }
+    private static IndexCoder prepend(IndexCoder indexCoder, byte[] buf, InlineString value) {
+        indexCoder = new IndexCoder(indexCoder.index() - value.length(), indexCoder.coder());
+        value.getBytes(buf, indexCoder.index(), indexCoder.coder());
         return indexCoder;
     }
 
     /**
-     * Instantiates the String with given buffer and coder
+     * Instantiates a uncompressed string with given buffer and coder
      * @param buf           buffer to use
      * @param indexCoder    remaining index (should be zero) and coder
      * @return String       resulting string
      */
-    private static InlineString newString(byte[] buf, long indexCoder) {
+    private static InlineString newString(byte[] buf, IndexCoder indexCoder) {
         // Use the private, non-copying constructor (unsafe!)
-        if (indexCoder == LATIN1) {
-            return new InlineString(buf, Utils.LATIN1);
-        } else if (indexCoder == UTF16) {
-            return new InlineString(buf, Utils.UTF16);
-        } else {
-            throw new InternalError("Storage is not completely initialized, " + (int)indexCoder + " bytes left");
-        }
+        return new InlineString(buf, buf.length, indexCoder.coder(), 0);
     }
 
     /**
      * Provides the initial coder for the String.
      * @return initial coder, adjusted into the upper half
      */
-    private static long initialCoder() {
-        return Utils.COMPACT_STRINGS ? LATIN1 : UTF16;
+    private static IndexCoder initialCoder() {
+        return Utils.COMPACT_STRINGS ? new IndexCoder(0, Utils.LATIN1) : new IndexCoder(0, Utils.UTF16);
     }
 
     static {

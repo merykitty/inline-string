@@ -225,7 +225,8 @@ public class MethodTest {
     @MethodSource("compareData")
     public void compareTo(CompareData data) {
         assertEquals(data.str0().compareTo(data.str1()),
-                data.inlStr0().compareTo(data.inlStr1()));
+                data.inlStr0().compareTo(data.inlStr1()),
+                "Parameters: <" + data.str0() + ">, <" + data.str1() + ">");
     }
 
     @ParameterizedTest
@@ -255,10 +256,11 @@ public class MethodTest {
     @ParameterizedTest
     @MethodSource
     public void regionMatches(RegionMatchesData data) {
-        assertSimilarExecutions(() -> data.str0().regionMatches(data.ignoreCase(),
+        assertEquals(data.str0().regionMatches(data.ignoreCase(),
                 data.toffset(), data.str1(), data.ooffset(), data.len()),
-                () -> data.inlStr0().regionMatches(data.ignoreCase(),
-                data.toffset(), data.inlStr1(), data.ooffset(), data.len()));
+                data.inlStr0().regionMatches(data.ignoreCase(),
+                data.toffset(), data.inlStr1(), data.ooffset(), data.len()),
+                "Parameters: <" + data.str0() + ">, <" + data.str1() + ">");
     }
 
     record StartsWithStringIntData(String str0, String str1,
@@ -286,7 +288,8 @@ public class MethodTest {
     @MethodSource("startsWithStringInt")
     public void startsWith(StartsWithStringIntData data) {
         assertEquals(data.str0().startsWith(data.str1(), data.toffset()),
-                data.inlStr0().startsWith(data.inlStr1(), data.toffset()));
+                data.inlStr0().startsWith(data.inlStr1(), data.toffset()),
+                "Parameters: <" + data.str0() + ">, <" + data.str1() + ">");
     }
 
     record StartsWithStringData(String str0, String str1, InlineString inlStr0, InlineString inlStr1) {}
@@ -310,7 +313,7 @@ public class MethodTest {
     @ParameterizedTest
     @MethodSource("startsWithString")
     public void startsWith(StartsWithStringData data) {
-        assertEquals(data.str0().startsWith(data.str1()), data.inlStr0().startsWith(data.inlStr1()));
+        assertEquals(data.str0().startsWith(data.str1()), data.inlStr0().startsWith(data.inlStr1()), "Parameters: <" + data.str0() + ">, <" + data.str1() + ">");
     }
 
     record EndsWithData(String str0, String str1, InlineString inlStr0, InlineString inlStr1) {}
@@ -416,7 +419,8 @@ public class MethodTest {
     @ParameterizedTest
     @MethodSource("indexOfStringData")
     public void indexOf(IndexOfStringData data) {
-        assertEquals(data.str0().indexOf(data.str1()), data.inlStr0().indexOf(data.inlStr1()));
+        assertEquals(data.str0().indexOf(data.str1()), data.inlStr0().indexOf(data.inlStr1()),
+                "Parameters: <" + data.str0() + ">, <" + data.str1() + ">");
     }
 
     record IndexOfStringIntData(String str0, String str1, InlineString inlStr0, InlineString inlStr1, int fromIndex) {}
