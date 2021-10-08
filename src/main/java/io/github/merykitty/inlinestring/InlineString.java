@@ -229,7 +229,7 @@ public class InlineString
      * of the <a href="Character.html#unicode">Unicode code point</a> array
      * argument.  The {@code offset} argument is the index of the first code
      * point of the subarray and the {@code count} argument specifies the
-     * lwngth of the subarray.  The contents of the subarray are converted to
+     * length of the subarray.  The contents of the subarray are converted to
      * {@code char}s; subsequent modification of the {@code int} array does not
      * affect the newly created string.
      *
@@ -290,9 +290,9 @@ public class InlineString
 
     /**
      * Initialize an {@code InlineString} by decoding the specified subarray of
-     * bytes using the specified charset.  The length of the new {@code String}
-     * is a function of the charset, and hence may not be equal to the length
-     * of the subarray.
+     * bytes using the specified charset.  The length of the new
+     * {@code InlineString} is a function of the charset, and hence may not be
+     * equal to the length of the subarray.
      *
      * <p> The behavior of this constructor when the given bytes are not valid
      * in the given charset is unspecified.  The {@link
@@ -329,7 +329,7 @@ public class InlineString
     /**
      * Initialize an {@code InlineString} by decoding the specified subarray of
      * bytes using the specified {@linkplain java.nio.charset.Charset charset}.
-     * The length of the new {@code String} is a function of the charset, and
+     * The length of the new {@code InlineString} is a function of the charset, and
      * hence may not be equal to the length of the subarray.
      *
      * <p> This method always replaces malformed-input and unmappable-character
@@ -961,10 +961,10 @@ public class InlineString
     }
 
     /**
-     * Initialize an {@code InlineString} by decoding the specified array of
-     * bytes using the specified {@linkplain java.nio.charset.Charset charset}.
-     * The length of the new {@code InlineString} is a function of the charset,
-     * and hence may not be equal to the length of the byte array.
+     * Initialize an {@code InlineString} by decoding the specified array of bytes
+     * using the specified {@linkplain java.nio.charset.Charset charset}.  The
+     * length of the new {@code InlineString} is a function of the charset, and
+     * hence may not be equal to the length of the byte array.
      *
      * <p> The behavior of this constructor when the given bytes are not valid
      * in the given charset is unspecified.  The {@link
@@ -1043,10 +1043,10 @@ public class InlineString
     }
 
     /**
-     * Initialize an {@code InlineString} by decoding the specified array of
-     * bytes using the platform's default charset.  The length of the new
-     * {@code InlineString} is a function of the charset, and hence may not be
-     * equal to the length of the byte array.
+     * Initialize an {@code InlineString} by decoding the specified array of bytes
+     * using the platform's default charset.  The length of the new {@code
+     * InlineString} is a function of the charset, and hence may not be equal to
+     * the length of the byte array.
      *
      * <p> The behavior of this constructor when the given bytes are not valid
      * in the default charset is unspecified.  The {@link
@@ -1066,7 +1066,7 @@ public class InlineString
      * Initialize an {@code InlineString} that contains the sequence of
      * characters currently contained in the string buffer argument. The
      * contents of the string buffer are copied; subsequent modification of the
-     * string buffer does not affect the created string.
+     * string buffer does not affect the newly created string.
      *
      * @param  buffer
      *         A {@code StringBuffer}
@@ -1098,6 +1098,7 @@ public class InlineString
      * @return  the length of the sequence of characters represented by this
      *          object.
      */
+    @Override
     public int length() {
         return length;
     }
@@ -1150,8 +1151,8 @@ public class InlineString
      * {@link #length()}{@code  - 1}.
      *
      * <p> If the {@code char} value specified at the given index
-     * is in the high-surrogate range, the following value is less
-     * than the length of this {@code InlineString}, and the
+     * is in the high-surrogate range, the following index is less
+     * than the length of this {@code String}, and the
      * {@code char} value at the following index is in the
      * low-surrogate range, then the supplementary code point
      * corresponding to this surrogate pair is returned. Otherwise,
@@ -1212,7 +1213,7 @@ public class InlineString
 
     /**
      * Returns the number of Unicode code points in the specified text
-     * range of this {@code InlineString}. The text range begins at the
+     * range of this {@code String}. The text range begins at the
      * specified {@code beginIndex} and extends to the
      * {@code char} at index {@code endIndex - 1}. Thus the
      * length (in {@code char}s) of the text range is
@@ -1227,7 +1228,7 @@ public class InlineString
      * range
      * @throws    IndexOutOfBoundsException if the
      * {@code beginIndex} is negative, or {@code endIndex}
-     * is larger than the length of this {@code InlineString}, or
+     * is larger than the length of this {@code String}, or
      * {@code beginIndex} is larger than {@code endIndex}.
      * @since  1.5
      */
@@ -1241,7 +1242,7 @@ public class InlineString
     }
 
     /**
-     * Returns the index within this {@code InlineString} that is
+     * Returns the index within this {@code String} that is
      * offset from the given {@code index} by
      * {@code codePointOffset} code points. Unpaired surrogates
      * within the text range given by {@code index} and
@@ -1249,14 +1250,14 @@ public class InlineString
      *
      * @param index the index to be offset
      * @param codePointOffset the offset in code points
-     * @return the index within this {@code InlineString}
+     * @return the index within this {@code String}
      * @throws    IndexOutOfBoundsException if {@code index}
      *   is negative or larger then the length of this
-     *   {@code InlineString}, or if {@code codePointOffset} is positive
+     *   {@code String}, or if {@code codePointOffset} is positive
      *   and the substring starting with {@code index} has fewer
      *   than {@code codePointOffset} code points,
      *   or if {@code codePointOffset} is negative and the substring
-     *   before {@code index} has fewer than the absolute length
+     *   before {@code index} has fewer than the absolute value
      *   of {@code codePointOffset} code points.
      * @since 1.5
      */
@@ -1310,8 +1311,8 @@ public class InlineString
     }
 
     /**
-     * Encodes this {@code InlineString} into a sequence of bytes using the
-     * named charset, storing the result into a new byte array.
+     * Encodes this {@code String} into a sequence of bytes using the named
+     * charset, storing the result into a new byte array.
      *
      * <p> The behavior of this method when this string cannot be encoded in
      * the given charset is unspecified.  The {@link
@@ -1336,9 +1337,9 @@ public class InlineString
     }
 
     /**
-     * Encodes this {@code InlineString} into a sequence of bytes using the
-     * given {@linkplain java.nio.charset.Charset charset}, storing the result
-     * into a new byte array.
+     * Encodes this {@code String} into a sequence of bytes using the given
+     * {@linkplain java.nio.charset.Charset charset}, storing the result into a
+     * new byte array.
      *
      * <p> This method always replaces malformed-input and unmappable-character
      * sequences with this charset's default replacement byte array.  The
@@ -1359,7 +1360,7 @@ public class InlineString
     }
 
     /**
-     * Encodes this {@code InlineString} into a sequence of bytes using the
+     * Encodes this {@code String} into a sequence of bytes using the
      * platform's default charset, storing the result into a new byte array.
      *
      * <p> The behavior of this method when this string cannot be encoded in
@@ -1458,18 +1459,18 @@ public class InlineString
 
     /**
      * Compares this string to the specified {@code CharSequence}.  The
-     * result is {@code true} if and only if this {@code InlineString}
-     * represents the same sequence of char values as the specified
-     * sequence. Note that if the {@code CharSequence} is a
-     * {@code StringBuffer} then the method synchronizes on it.
+     * result is {@code true} if and only if this {@code String} represents the
+     * same sequence of char values as the specified sequence. Note that if the
+     * {@code CharSequence} is a {@code StringBuffer} then the method
+     * synchronizes on it.
      *
      * <p>For finer-grained String comparison, refer to
      * {@link java.text.Collator}.
      *
      * @param  cs
-     *         The sequence to compare this {@code InlineString} against
+     *         The sequence to compare this {@code String} against
      *
-     * @return  {@code true} if this {@code InlineString} represents the same
+     * @return  {@code true} if this {@code String} represents the same
      *          sequence of char values as the specified sequence, {@code
      *          false} otherwise
      *
@@ -1511,10 +1512,10 @@ public class InlineString
     }
 
     /**
-     * Compares this {@code InlineString} to another {@code InlineString}, ignoring
-     * case considerations.  Two strings are considered equal ignoring case if
-     * they are of the same length and corresponding Unicode code points in the
-     * two strings are equal ignoring case.
+     * Compares this {@code String} to another {@code String}, ignoring case
+     * considerations.  Two strings are considered equal ignoring case if they
+     * are of the same length and corresponding Unicode code points in the two
+     * strings are equal ignoring case.
      *
      * <p> Two Unicode code points are considered the same
      * ignoring case if at least one of the following is true:
@@ -1548,11 +1549,11 @@ public class InlineString
      * Compares two strings lexicographically.
      * The comparison is based on the Unicode value of each character in
      * the strings. The character sequence represented by this
-     * {@code InlineString} object is compared lexicographically to the
+     * {@code String} object is compared lexicographically to the
      * character sequence represented by the argument string. The result is
-     * a negative integer if this {@code InlineString} object
+     * a negative integer if this {@code String} object
      * lexicographically precedes the argument string. The result is a
-     * positive integer if this {@code InlineString} object lexicographically
+     * positive integer if this {@code String} object lexicographically
      * follows the argument string. The result is zero if the strings
      * are equal; {@code compareTo} returns {@code 0} exactly when
      * the {@link #equals(Object)} method would return {@code true}.
@@ -1562,32 +1563,33 @@ public class InlineString
      * that is a valid index for both strings, or their lengths are different,
      * or both. If they have different characters at one or more index
      * positions, let <i>k</i> be the smallest such index; then the string
-     * whose character at position <i>k</i> has the smaller index, as
+     * whose character at position <i>k</i> has the smaller value, as
      * determined by using the {@code <} operator, lexicographically precedes the
      * other string. In this case, {@code compareTo} returns the
      * difference of the two character values at position {@code k} in
-     * the two string -- that is, the index:
+     * the two string -- that is, the value:
      * <blockquote><pre>
      * this.charAt(k)-anotherString.charAt(k)
      * </pre></blockquote>
      * If there is no index position at which they differ, then the shorter
      * string lexicographically precedes the longer string. In this case,
      * {@code compareTo} returns the difference of the lengths of the
-     * strings -- that is, the index:
+     * strings -- that is, the value:
      * <blockquote><pre>
-     * this.index()-anotherString.index()
+     * this.length()-anotherString.length()
      * </pre></blockquote>
      *
      * <p>For finer-grained String comparison, refer to
      * {@link java.text.Collator}.
      *
-     * @param   anotherString   the {@code InlineString} to be compared.
-     * @return  the index {@code 0} if the argument string is equal to
-     *          this string; a index less than {@code 0} if this string
+     * @param   anotherString   the {@code String} to be compared.
+     * @return  the value {@code 0} if the argument string is equal to
+     *          this string; a value less than {@code 0} if this string
      *          is lexicographically less than the string argument; and a
-     *          index greater than {@code 0} if this string is
+     *          value greater than {@code 0} if this string is
      *          lexicographically greater than the string argument.
      */
+    // Wait for universal tvars
 //    @Override
     public int compareTo(InlineString anotherString) {
         if (this.isCompressed() || anotherString.isCompressed()) {
@@ -1671,15 +1673,15 @@ public class InlineString
      * of the argument other. The result is true if these substrings
      * represent identical character sequences. The substring of this
      * {@code String} object to be compared begins at index {@code toffset}
-     * and has index {@code len}. The substring of other to be compared
-     * begins at index {@code ooffset} and has index {@code len}. The
+     * and has length {@code len}. The substring of other to be compared
+     * begins at index {@code ooffset} and has length {@code len}. The
      * result is {@code false} if and only if at least one of the following
      * is true:
      * <ul><li>{@code toffset} is negative.
      * <li>{@code ooffset} is negative.
-     * <li>{@code toffset+len} is greater than the index of this
+     * <li>{@code toffset+len} is greater than the length of this
      * {@code String} object.
-     * <li>{@code ooffset+len} is greater than the index of the other
+     * <li>{@code ooffset+len} is greater than the length of the other
      * argument.
      * <li>There is some nonnegative integer <i>k</i> less than {@code len}
      * such that:
@@ -1774,9 +1776,9 @@ public class InlineString
      * are true:
      * <ul><li>{@code toffset} is non-negative.
      * <li>{@code ooffset} is non-negative.
-     * <li>{@code toffset+len} is less than or equal to the index of this
+     * <li>{@code toffset+len} is less than or equal to the length of this
      * {@code String} object.
-     * <li>{@code ooffset+len} is less than or equal to the index of the other
+     * <li>{@code ooffset+len} is less than or equal to the length of the other
      * argument.
      * <li>if {@code ignoreCase} is {@code false}, all pairs of corresponding Unicode
      * code points are equal integer values; or if {@code ignoreCase} is {@code true},
@@ -1798,7 +1800,7 @@ public class InlineString
      * @param   ooffset      the starting offset of the subregion in the string
      *                       argument.
      * @param   len          the number of characters (Unicode code units -
-     *                       16bit {@code char} index) to compare.
+     *                       16bit {@code char} value) to compare.
      * @return  {@code true} if the specified subregion of this string
      *          matches the specified subregion of the string argument;
      *          {@code false} otherwise. Whether the matching is exact
@@ -1839,7 +1841,7 @@ public class InlineString
      *          argument is a prefix of the substring of this object starting
      *          at index {@code toffset}; {@code false} otherwise.
      *          The result is {@code false} if {@code toffset} is
-     *          negative or greater than the index of this
+     *          negative or greater than the length of this
      *          {@code String} object; otherwise the result is the same
      *          as the result of the expression
      *          <pre>
@@ -1928,11 +1930,11 @@ public class InlineString
      * s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]
      * </pre></blockquote>
      * using {@code int} arithmetic, where {@code s[i]} is the
-     * <i>i</i>th character of the string, {@code n} is the index of
+     * <i>i</i>th character of the string, {@code n} is the length of
      * the string, and {@code ^} indicates exponentiation.
-     * (The hash index of the empty string is zero.)
+     * (The hash value of the empty string is zero.)
      *
-     * @return  a hash code index for this object.
+     * @return  a hash code value for this object.
      */
     public int hashCode() {
         if (isCompressed()) {
@@ -1946,17 +1948,17 @@ public class InlineString
 
     /**
      * Returns the index within this string of the first occurrence of
-     * the specified character. If a character with index
+     * the specified character. If a character with value
      * {@code ch} occurs in the character sequence represented by
      * this {@code String} object, then the index (in Unicode
      * code units) of the first such occurrence is returned. For
      * values of {@code ch} in the range from 0 to 0xFFFF
-     * (inclusive), this is the smallest index <i>k</i> such that:
+     * (inclusive), this is the smallest value <i>k</i> such that:
      * <blockquote><pre>
      * this.charAt(<i>k</i>) == ch
      * </pre></blockquote>
      * is true. For other values of {@code ch}, it is the
-     * smallest index <i>k</i> such that:
+     * smallest value <i>k</i> such that:
      * <blockquote><pre>
      * this.codePointAt(<i>k</i>) == ch
      * </pre></blockquote>
@@ -1976,17 +1978,17 @@ public class InlineString
      * Returns the index within this string of the first occurrence of the
      * specified character, starting the search at the specified index.
      * <p>
-     * If a character with index {@code ch} occurs in the
+     * If a character with value {@code ch} occurs in the
      * character sequence represented by this {@code String}
      * object at an index no smaller than {@code fromIndex}, then
      * the index of the first such occurrence is returned. For values
      * of {@code ch} in the range from 0 to 0xFFFF (inclusive),
-     * this is the smallest index <i>k</i> such that:
+     * this is the smallest value <i>k</i> such that:
      * <blockquote><pre>
      * (this.charAt(<i>k</i>) == ch) {@code &&} (<i>k</i> &gt;= fromIndex)
      * </pre></blockquote>
      * is true. For other values of {@code ch}, it is the
-     * smallest index <i>k</i> such that:
+     * smallest value <i>k</i> such that:
      * <blockquote><pre>
      * (this.codePointAt(<i>k</i>) == ch) {@code &&} (<i>k</i> &gt;= fromIndex)
      * </pre></blockquote>
@@ -1995,10 +1997,10 @@ public class InlineString
      * {@code -1} is returned.
      *
      * <p>
-     * There is no restriction on the index of {@code fromIndex}. If it
+     * There is no restriction on the value of {@code fromIndex}. If it
      * is negative, it has the same effect as if it were zero: this entire
-     * string may be searched. If it is greater than the index of this
-     * string, it has the same effect as if it were equal to the index of
+     * string may be searched. If it is greater than the length of this
+     * string, it has the same effect as if it were equal to the length of
      * this string: {@code -1} is returned.
      *
      * <p>All indices are specified in {@code char} values
@@ -2025,12 +2027,12 @@ public class InlineString
      * Returns the index within this string of the last occurrence of
      * the specified character. For values of {@code ch} in the
      * range from 0 to 0xFFFF (inclusive), the index (in Unicode code
-     * units) returned is the largest index <i>k</i> such that:
+     * units) returned is the largest value <i>k</i> such that:
      * <blockquote><pre>
      * this.charAt(<i>k</i>) == ch
      * </pre></blockquote>
      * is true. For other values of {@code ch}, it is the
-     * largest index <i>k</i> such that:
+     * largest value <i>k</i> such that:
      * <blockquote><pre>
      * this.codePointAt(<i>k</i>) == ch
      * </pre></blockquote>
@@ -2053,12 +2055,12 @@ public class InlineString
      * the specified character, searching backward starting at the
      * specified index. For values of {@code ch} in the range
      * from 0 to 0xFFFF (inclusive), the index returned is the largest
-     * index <i>k</i> such that:
+     * value <i>k</i> such that:
      * <blockquote><pre>
      * (this.charAt(<i>k</i>) == ch) {@code &&} (<i>k</i> &lt;= fromIndex)
      * </pre></blockquote>
      * is true. For other values of {@code ch}, it is the
-     * largest index <i>k</i> such that:
+     * largest value <i>k</i> such that:
      * <blockquote><pre>
      * (this.codePointAt(<i>k</i>) == ch) {@code &&} (<i>k</i> &lt;= fromIndex)
      * </pre></blockquote>
@@ -2071,10 +2073,10 @@ public class InlineString
      *
      * @param   ch          a character (Unicode code point).
      * @param   fromIndex   the index to start the search from. There is no
-     *          restriction on the index of {@code fromIndex}. If it is
-     *          greater than or equal to the index of this string, it has
+     *          restriction on the value of {@code fromIndex}. If it is
+     *          greater than or equal to the length of this string, it has
      *          the same effect as if it were equal to one less than the
-     *          index of this string: this entire string may be searched.
+     *          length of this string: this entire string may be searched.
      *          If it is negative, it has the same effect as if it were -1:
      *          -1 is returned.
      * @return  the index of the last occurrence of the character in the
@@ -2096,11 +2098,11 @@ public class InlineString
      * Returns the index within this string of the first occurrence of the
      * specified substring.
      *
-     * <p>The returned index is the smallest index {@code k} for which:
+     * <p>The returned index is the smallest value {@code k} for which:
      * <pre>{@code
      * this.startsWith(str, k)
      * }</pre>
-     * If no such index of {@code k} exists, then {@code -1} is returned.
+     * If no such value of {@code k} exists, then {@code -1} is returned.
      *
      * @param   str   the substring to search for.
      * @return  the index of the first occurrence of the specified substring,
@@ -2133,12 +2135,12 @@ public class InlineString
      * Returns the index within this string of the first occurrence of the
      * specified substring, starting at the specified index.
      *
-     * <p>The returned index is the smallest index {@code k} for which:
+     * <p>The returned index is the smallest value {@code k} for which:
      * <pre>{@code
-     *     k >= Math.min(fromIndex, this.index()) &&
+     *     k >= Math.min(fromIndex, this.length()) &&
      *                   this.startsWith(str, k)
      * }</pre>
-     * If no such index of {@code k} exists, then {@code -1} is returned.
+     * If no such value of {@code k} exists, then {@code -1} is returned.
      *
      * @param   str         the substring to search for.
      * @param   fromIndex   the index from which to start the search.
@@ -2212,13 +2214,13 @@ public class InlineString
     /**
      * Returns the index within this string of the last occurrence of the
      * specified substring.  The last occurrence of the empty string ""
-     * is considered to occur at the index index {@code this.index()}.
+     * is considered to occur at the index value {@code this.length()}.
      *
-     * <p>The returned index is the largest index {@code k} for which:
+     * <p>The returned index is the largest value {@code k} for which:
      * <pre>{@code
      * this.startsWith(str, k)
      * }</pre>
-     * If no such index of {@code k} exists, then {@code -1} is returned.
+     * If no such value of {@code k} exists, then {@code -1} is returned.
      *
      * @param   str   the substring to search for.
      * @return  the index of the last occurrence of the specified substring,
@@ -2232,12 +2234,12 @@ public class InlineString
      * Returns the index within this string of the last occurrence of the
      * specified substring, searching backward starting at the specified index.
      *
-     * <p>The returned index is the largest index {@code k} for which:
+     * <p>The returned index is the largest value {@code k} for which:
      * <pre>{@code
-     *     k <= Math.min(fromIndex, this.index()) &&
+     *     k <= Math.min(fromIndex, this.length()) &&
      *                   this.startsWith(str, k)
      * }</pre>
-     * If no such index of {@code k} exists, then {@code -1} is returned.
+     * If no such value of {@code k} exists, then {@code -1} is returned.
      *
      * @param   str         the substring to search for.
      * @param   fromIndex   the index to start the search from.
@@ -2316,7 +2318,7 @@ public class InlineString
      * @return     the specified substring.
      * @throws     IndexOutOfBoundsException  if
      *             {@code beginIndex} is negative or larger than the
-     *             index of this {@code String} object.
+     *             length of this {@code String} object.
      */
     public InlineString substring(int beginIndex) {
         return substring(beginIndex, length());
@@ -2326,7 +2328,7 @@ public class InlineString
      * Returns a string that is a substring of this string. The
      * substring begins at the specified {@code beginIndex} and
      * extends to the character at index {@code endIndex - 1}.
-     * Thus the index of the substring is {@code endIndex-beginIndex}.
+     * Thus the length of the substring is {@code endIndex-beginIndex}.
      * <p>
      * Examples:
      * <blockquote><pre>
@@ -2339,7 +2341,7 @@ public class InlineString
      * @return     the specified substring.
      * @throws     IndexOutOfBoundsException  if the
      *             {@code beginIndex} is negative, or
-     *             {@code endIndex} is larger than the index of
+     *             {@code endIndex} is larger than the length of
      *             this {@code String} object, or
      *             {@code beginIndex} is larger than
      *             {@code endIndex}.
@@ -2388,6 +2390,7 @@ public class InlineString
      *
      * @since 1.4
      */
+    @Override
     public CharSequence subSequence(int beginIndex, int endIndex) {
         return this.substring(beginIndex, endIndex);
     }
@@ -2395,7 +2398,7 @@ public class InlineString
     /**
      * Concatenates the specified string to the end of this string.
      * <p>
-     * If the index of the argument string is {@code 0}, then this
+     * If the length of the argument string is {@code 0}, then this
      * {@code String} object is returned. Otherwise, a
      * {@code String} object is returned that represents a character
      * sequence that is the concatenation of the character sequence
@@ -2659,23 +2662,23 @@ public class InlineString
      * never produces such empty leading substring.
      *
      * <p> The {@code limit} parameter controls the number of times the
-     * pattern is applied and therefore affects the index of the resulting
+     * pattern is applied and therefore affects the length of the resulting
      * array.
      * <ul>
      *    <li><p>
      *    If the <i>limit</i> is positive then the pattern will be applied
-     *    at most <i>limit</i>&nbsp;-&nbsp;1 times, the array's index will be
+     *    at most <i>limit</i>&nbsp;-&nbsp;1 times, the array's length will be
      *    no greater than <i>limit</i>, and the array's last entry will contain
      *    all input beyond the last matched delimiter.</p></li>
      *
      *    <li><p>
      *    If the <i>limit</i> is zero then the pattern will be applied as
-     *    many times as possible, the array can have any index, and trailing
+     *    many times as possible, the array can have any length, and trailing
      *    empty strings will be discarded.</p></li>
      *
      *    <li><p>
      *    If the <i>limit</i> is negative then the pattern will be applied
-     *    as many times as possible and the array can have any index.</p></li>
+     *    as many times as possible and the array can have any length.</p></li>
      * </ul>
      *
      * <p> The string {@code "boo:and:foo"}, for example, yields the
@@ -3010,7 +3013,7 @@ public class InlineString
      * case using the rules of the given {@code Locale}.  Case mapping is based
      * on the Unicode Standard version specified by the {@link java.lang.Character Character}
      * class. Since case mappings are not always 1:1 char mappings, the resulting
-     * {@code String} may be a different index than the original {@code String}.
+     * {@code String} may be a different length than the original {@code String}.
      * <p>
      * Examples of lowercase  mappings are in the following table:
      * <table class="plain">
@@ -3092,7 +3095,7 @@ public class InlineString
      * case using the rules of the given {@code Locale}. Case mapping is based
      * on the Unicode Standard version specified by the {@link java.lang.Character Character}
      * class. Since case mappings are not always 1:1 char mappings, the resulting
-     * {@code String} may be a different index than the original {@code String}.
+     * {@code String} may be a different length than the original {@code String}.
      * <p>
      * Examples of locale-sensitive and 1:M case mappings are in the following table.
      *
@@ -3169,7 +3172,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose index is this string, with all leading
+     * Returns a string whose value is this string, with all leading
      * and trailing space removed, where space is defined
      * as any character whose codepoint is less than or equal to
      * {@code 'U+0020'} (the space character).
@@ -3196,7 +3199,7 @@ public class InlineString
      * This method may be used to trim space (as defined above) from
      * the beginning and end of a string.
      *
-     * @return  a string whose index is this string, with all leading
+     * @return  a string whose value is this string, with all leading
      *          and trailing space removed, or this string if it
      *          has no leading or trailing space.
      */
@@ -3206,7 +3209,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose index is this string, with all leading
+     * Returns a string whose value is this string, with all leading
      * and trailing {@linkplain Character#isWhitespace(int) white space}
      * removed.
      * <p>
@@ -3224,7 +3227,7 @@ public class InlineString
      * {@linkplain Character#isWhitespace(int) white space} from
      * the beginning and end of a string.
      *
-     * @return  a string whose index is this string, with all leading
+     * @return  a string whose value is this string, with all leading
      *          and trailing white space removed
      *
      * @see Character#isWhitespace(int)
@@ -3237,7 +3240,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose index is this string, with all leading
+     * Returns a string whose value is this string, with all leading
      * {@linkplain Character#isWhitespace(int) white space} removed.
      * <p>
      * If this {@code String} object represents an empty string,
@@ -3253,7 +3256,7 @@ public class InlineString
      * {@linkplain Character#isWhitespace(int) white space} from
      * the beginning of a string.
      *
-     * @return  a string whose index is this string, with all leading white
+     * @return  a string whose value is this string, with all leading white
      *          space removed
      *
      * @see Character#isWhitespace(int)
@@ -3266,7 +3269,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose index is this string, with all trailing
+     * Returns a string whose value is this string, with all trailing
      * {@linkplain Character#isWhitespace(int) white space} removed.
      * <p>
      * If this {@code String} object represents an empty string,
@@ -3282,7 +3285,7 @@ public class InlineString
      * {@linkplain Character#isWhitespace(int) white space} from
      * the end of a string.
      *
-     * @return  a string whose index is this string, with all trailing white
+     * @return  a string whose value is this string, with all trailing white
      *          space removed
      *
      * @see Character#isWhitespace(int)
@@ -3346,7 +3349,7 @@ public class InlineString
     }
 
     /**
-     * Adjusts the indentation of each line of this string based on the index of
+     * Adjusts the indentation of each line of this string based on the value of
      * {@code n}, and normalizes line termination characters.
      * <p>
      * This string is conceptually separated into lines using
@@ -3412,7 +3415,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose index is this string, with incidental
+     * Returns a string whose value is this string, with incidental
      * {@linkplain Character#isWhitespace(int) white space} removed from
      * the beginning and end of every line.
      * <p>
@@ -3461,7 +3464,7 @@ public class InlineString
      *   {@linkplain String#isBlank() blank}.</p>
      *   </li>
      * </ul>
-     * <p>The <i>min</i> index is the smallest of these counts.
+     * <p>The <i>min</i> value is the smallest of these counts.
      * <p>
      * For each {@linkplain String#isBlank() non-blank} line, <i>min</i> leading
      * {@linkplain Character#isWhitespace(int) white space} characters are
@@ -3540,7 +3543,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose index is this string, with escape sequences
+     * Returns a string whose value is this string, with escape sequences
      * translated as if in a string literal.
      * <p>
      * Escape sequences are translated as follows;
@@ -3768,7 +3771,7 @@ public class InlineString
     /**
      * Converts this string to a new character array.
      *
-     * @return  a newly allocated character array whose index is the index
+     * @return  a newly allocated character array whose length is the length
      *          of this string and whose contents are initialized to contain
      *          the character sequence represented by this string.
      */
@@ -3885,7 +3888,7 @@ public class InlineString
      *
      * @param   obj   an {@code Object}.
      * @return  if the argument is {@code null}, then a string equal to
-     *          {@code "null"}; otherwise, the index of
+     *          {@code "null"}; otherwise, the value of
      *          {@code obj.toString()} is returned.
      * @see     java.lang.Object#toString()
      */
@@ -3913,19 +3916,19 @@ public class InlineString
      * <p>
      * The {@code offset} argument is the index of the first
      * character of the subarray. The {@code count} argument
-     * specifies the index of the subarray. The contents of the subarray
+     * specifies the length of the subarray. The contents of the subarray
      * are copied; subsequent modification of the character array does not
      * affect the returned string.
      *
      * @param   data     the character array.
      * @param   offset   initial offset of the subarray.
-     * @param   count    index of the subarray.
+     * @param   count    length of the subarray.
      * @return  a {@code String} that contains the characters of the
      *          specified subarray of the character array.
      * @throws    IndexOutOfBoundsException if {@code offset} is
      *          negative, or {@code count} is negative, or
      *          {@code offset+count} is larger than
-     *          {@code data.index}.
+     *          {@code data.length}.
      */
     public static InlineString valueOf(char[] data, int offset, int count) {
         return new InlineString(data, offset, count);
@@ -3936,13 +3939,13 @@ public class InlineString
      *
      * @param   data     the character array.
      * @param   offset   initial offset of the subarray.
-     * @param   count    index of the subarray.
+     * @param   count    length of the subarray.
      * @return  a {@code String} that contains the characters of the
      *          specified subarray of the character array.
      * @throws    IndexOutOfBoundsException if {@code offset} is
      *          negative, or {@code count} is negative, or
      *          {@code offset+count} is larger than
-     *          {@code data.index}.
+     *          {@code data.length}.
      */
     public static InlineString copyValueOf(char[] data, int offset, int count) {
         return new InlineString(data, offset, count);
@@ -3976,7 +3979,7 @@ public class InlineString
      * argument.
      *
      * @param   c   a {@code char}.
-     * @return  a string of index {@code 1} containing
+     * @return  a string of length {@code 1} containing
      *          as its single character the argument {@code c}.
      */
     public static InlineString valueOf(char c) {
@@ -4044,7 +4047,7 @@ public class InlineString
     }
 
     /**
-     * Returns a string whose index is the concatenation of this
+     * Returns a string whose value is the concatenation of this
      * string repeated {@code count} times.
      * <p>
      * If this string is empty or count is zero then the empty
@@ -4115,7 +4118,7 @@ public class InlineString
      * Copy character bytes from this string into dst starting at dstBegin.
      * This method doesn't perform any range checking.
      *
-     * Invoker guarantees: dst is in String.UTF16 (inflate itself for asb), if two
+     * Invoker guarantees: dst is in UTF16 (inflate itself for asb), if two
      * coders are different, and dst is big enough (range check)
      *
      * @param dstBegin  the char index, not offset of byte[]
@@ -4316,7 +4319,6 @@ public class InlineString
      * instance.
      *
      * @return an {@link Optional} describing the {@linkplain InlineString} instance
-     * @since 12
      */
     @Override
     public Optional<DynamicConstantDesc<InlineString.ref>> describeConstable() {

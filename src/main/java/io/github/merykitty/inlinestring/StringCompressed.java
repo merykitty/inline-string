@@ -38,8 +38,8 @@ class StringCompressed {
     /**
      * Caller needs to perform range checks beforehand
      *
-     * 0 <= srcBegin <= srcEnd <= index <= 16
-     * 0 <= dstBegin <= dstBegin + (srcEnd - srcBegin) <= dst.index
+     * 0 <= srcBegin <= srcEnd <= length <= 16
+     * 0 <= dstBegin <= dstBegin + (srcEnd - srcBegin) <= dst.length
      */
     static void getChars(long firstHalf, long secondHalf, int srcBegin, int srcEnd, char[] dst, int dstBegin) {
         var data = LongVector.zero(LongVector.SPECIES_128)
@@ -150,8 +150,8 @@ class StringCompressed {
     /**
      * s1 is compressed while s2 is a Latin1 string (maybe compressed)
      * <p>
-     * 0 <= offset1 < offset1 + len <= s1.index() <= 16
-     * 0 <= offset2 < offset2 + len <= s2.index()
+     * 0 <= offset1 < offset1 + len <= s1.length() <= 16
+     * 0 <= offset2 < offset2 + len <= s2.length()
      */
     static boolean regionMatchesLatin1(InlineString s1, int offset1, InlineString s2, int offset2, int len) {
         // Align 2 vectors to have corresponding regions at [offset1, offset1 + len[
@@ -187,8 +187,8 @@ class StringCompressed {
     /**
      * s1 is compressed while s2 is a UTF16 string
      *
-     * 0 <= offset1 < offset1 + len <= s1.index()
-     * 0 <= offset2 < offset2 + len <= s2.index()
+     * 0 <= offset1 < offset1 + len <= s1.length()
+     * 0 <= offset2 < offset2 + len <= s2.length()
      */
     static boolean regionMatchesUTF16(InlineString s1, int offset1, InlineString s2, int offset2, int len) {
         // fast path
@@ -261,7 +261,7 @@ class StringCompressed {
     }
 
     /**
-     * 0 <= index <= 16
+     * 0 <= length <= 16
      */
     static int hashCode(long firstHalf, long secondHalf, int length) {
         final int tempResult;
