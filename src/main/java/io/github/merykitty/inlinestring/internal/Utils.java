@@ -8,14 +8,16 @@ import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.nio.ByteOrder;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.function.Supplier;
 
 import static java.lang.invoke.MethodType.methodType;
 
 public final class Utils {
-    public static final boolean COMPRESSED_STRINGS;
     public static final MethodHandles.Lookup STRING_LOOKUP;
     public static final boolean COMPACT_STRINGS;
+    public static final boolean COMPRESSED_STRINGS;
     public static final byte LATIN1;
     public static final byte UTF16;
     public static final DirectMethodHandleDesc INLINE_STRING_CONSTRUCTOR_STRING;
@@ -53,20 +55,9 @@ public final class Utils {
         }
     }
 
-    public static byte[] stringBuilderGetValue(CharSequence arg) {
+    public static byte[] stringEncode(Charset cs, byte coder, byte[] val) {
         try {
-            return (byte[]) STRING_BUILDER_GET_VALUE.invokeExact(arg);
-        } catch (RuntimeException | Error e) {
-            throw e;
-        } catch (Throwable e) {
-            // Can't reach here
-            throw new AssertionError(e);
-        }
-    }
-
-    public static byte stringBuilderGetCoder(CharSequence arg) {
-        try {
-            return (byte) STRING_BUILDER_GET_CODER.invokeExact(arg);
+            return (byte[]) STRING_ENCODE.invokeExact(cs, coder, val);
         } catch (RuntimeException | Error e) {
             throw e;
         } catch (Throwable e) {
@@ -119,15 +110,38 @@ public final class Utils {
         }
     }
 
+    public static byte[] stringBuilderGetValue(CharSequence arg) {
+        try {
+            return (byte[]) STRING_BUILDER_GET_VALUE.invokeExact(arg);
+        } catch (RuntimeException | Error e) {
+            throw e;
+        } catch (Throwable e) {
+            // Can't reach here
+            throw new AssertionError(e);
+        }
+    }
+
+    public static byte stringBuilderGetCoder(CharSequence arg) {
+        try {
+            return (byte) STRING_BUILDER_GET_CODER.invokeExact(arg);
+        } catch (RuntimeException | Error e) {
+            throw e;
+        } catch (Throwable e) {
+            // Can't reach here
+            throw new AssertionError(e);
+        }
+    }
+
     private static final MethodHandle NEW_STRING_VALUE_CODER;
     private static final MethodHandle STRING_VALUE;
     private static final MethodHandle STRING_CODER;
-    private static final MethodHandle STRING_BUILDER_GET_VALUE;
-    private static final MethodHandle STRING_BUILDER_GET_CODER;
+    private static final MethodHandle STRING_ENCODE;
     private static final MethodHandle STRING_CHECK_INDEX;
     private static final MethodHandle STRING_CHECK_OFFSET;
     private static final MethodHandle STRING_CHECK_BOUNDS_OFF_COUNT;
     private static final MethodHandle STRING_CHECK_BOUNDS_BEGIN_END;
+    private static final MethodHandle STRING_BUILDER_GET_VALUE;
+    private static final MethodHandle STRING_BUILDER_GET_CODER;
 
     static {
         try {
@@ -140,11 +154,8 @@ public final class Utils {
                     Byte.TYPE.arrayType(), Byte.TYPE));
             STRING_VALUE = lookup.findVirtual(String.class, "value", methodType(Byte.TYPE.arrayType()));
             STRING_CODER = lookup.findVirtual(String.class, "coder", methodType(Byte.TYPE));
-            var abstractBuilderKlass = lookup.findClass("java.lang.AbstractStringBuilder");
-            STRING_BUILDER_GET_VALUE = lookup.findVirtual(abstractBuilderKlass, "getValue", methodType(Byte.TYPE.arrayType()))
-                    .asType(methodType(Byte.TYPE.arrayType(), CharSequence.class));
-            STRING_BUILDER_GET_CODER = lookup.findVirtual(abstractBuilderKlass, "getCoder", methodType(Byte.TYPE))
-                    .asType(methodType(Byte.TYPE, CharSequence.class));
+            STRING_ENCODE = lookup.findStatic(String.class, "encode", methodType(Byte.TYPE.arrayType(),
+                    Charset.class, Byte.TYPE, Byte.TYPE.arrayType()));
             STRING_CHECK_INDEX = lookup.findStatic(String.class, "checkIndex", methodType(Void.TYPE,
                     Integer.TYPE, Integer.TYPE));
             STRING_CHECK_OFFSET = lookup.findStatic(String.class, "checkOffset", methodType(Void.TYPE,
@@ -153,6 +164,12 @@ public final class Utils {
                     Integer.TYPE, Integer.TYPE, Integer.TYPE));
             STRING_CHECK_BOUNDS_BEGIN_END = lookup.findStatic(String.class, "checkBoundsBeginEnd", methodType(Void.TYPE,
                     Integer.TYPE, Integer.TYPE, Integer.TYPE));
+
+            var abstractBuilderKlass = lookup.findClass("java.lang.AbstractStringBuilder");
+            STRING_BUILDER_GET_VALUE = lookup.findVirtual(abstractBuilderKlass, "getValue", methodType(Byte.TYPE.arrayType()))
+                    .asType(methodType(Byte.TYPE.arrayType(), CharSequence.class));
+            STRING_BUILDER_GET_CODER = lookup.findVirtual(abstractBuilderKlass, "getCoder", methodType(Byte.TYPE))
+                    .asType(methodType(Byte.TYPE, CharSequence.class));
 
             var temp = false;
             try {

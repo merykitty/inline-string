@@ -364,7 +364,8 @@ public class MethodTest {
     @ParameterizedTest
     @MethodSource("codePointData")
     public void indexOf(CodePointData data) {
-        assertEquals(data.str().indexOf(data.ch()), data.inlStr().indexOf(data.ch()));
+        assertEquals(data.str().indexOf(data.ch()), data.inlStr().indexOf(data.ch()),
+                "Parameters: <" + data.str() + ">, <" + data.inlStr() + ">, <" + (char)data.ch() + ">");
     }
 
     record CodePointIndexData(String str, InlineString inlStr, int ch, int index) {}
@@ -387,20 +388,23 @@ public class MethodTest {
     @MethodSource("codePointIndexData")
     public void indexOf(CodePointIndexData data) {
         assertEquals(data.str().indexOf(data.ch(), data.index()),
-                data.inlStr().indexOf(data.ch(), data.index()));
+                data.inlStr().indexOf(data.ch(), data.index()),
+                "Parameters: <" + data.str() + ">, <" + data.inlStr() + ">, <" + (char)data.ch() + ">, <" + data.index() + ">");
     }
 
     @ParameterizedTest
     @MethodSource("codePointData")
     public void lastIndexOf(CodePointData data) {
-        assertEquals(data.str().lastIndexOf(data.ch()), data.inlStr().lastIndexOf(data.ch()));
+        assertEquals(data.str().lastIndexOf(data.ch()), data.inlStr().lastIndexOf(data.ch()),
+                "Parameters: <" + data.str() + ">, <" + data.inlStr() + ">, <" + (char)data.ch() + ">");
     }
 
     @ParameterizedTest
     @MethodSource("codePointIndexData")
     public void lastIndexOf(CodePointIndexData data) {
         assertEquals(data.str().lastIndexOf(data.ch(), data.index()),
-                data.inlStr().lastIndexOf(data.ch(), data.index()));
+                data.inlStr().lastIndexOf(data.ch(), data.index()),
+                "Parameters: <" + data.str() + ">, <" + data.inlStr() + ">, <" + (char)data.ch() + ">, <" + data.index() + ">");
     }
 
     record IndexOfStringData(String str0, String str1, InlineString inlStr0, InlineString inlStr1) {}

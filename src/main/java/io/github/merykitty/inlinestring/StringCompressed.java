@@ -3,15 +3,21 @@ package io.github.merykitty.inlinestring;
 import io.github.merykitty.inlinestring.internal.SmallStringByteData;
 import io.github.merykitty.inlinestring.internal.SmallStringCharData;
 import io.github.merykitty.inlinestring.internal.Utils;
-import jdk.incubator.vector.*;
-import jdk.internal.misc.Unsafe;
+import static io.github.merykitty.inlinestring.internal.Helper.*;
+import static io.github.merykitty.inlinestring.internal.Utils.COMPRESSED_STRINGS;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
+import java.util.Objects;
+import java.util.Spliterator;
+import java.util.function.Consumer;
+import java.util.function.IntConsumer;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
-import static io.github.merykitty.inlinestring.internal.Helper.*;
-import static io.github.merykitty.inlinestring.internal.Utils.COMPRESSED_STRINGS;
+import jdk.incubator.vector.*;
+import jdk.internal.misc.Unsafe;
 
 class StringCompressed {
     /**
@@ -23,16 +29,15 @@ class StringCompressed {
     private static final VarHandle BYTE_ARRAY_AS_INTS = MethodHandles.byteArrayViewVarHandle(Integer.TYPE.arrayType(), ByteOrder.nativeOrder()).withInvokeExactBehavior();
     private static final VarHandle BYTE_ARRAY_AS_SHORTS = MethodHandles.byteArrayViewVarHandle(Short.TYPE.arrayType(), ByteOrder.nativeOrder()).withInvokeExactBehavior();
     private static final VarHandle BYTE_ARRAY_AS_BYTES = MethodHandles.arrayElementVarHandle(Byte.TYPE.arrayType()).withInvokeExactBehavior();
-    static final Unsafe UNSAFE = Unsafe.getUnsafe();
+    private static final Unsafe UNSAFE = Unsafe.getUnsafe();
 
-    static char charAt(long firstHalf, long secondHalf, int length, int index) {
+    public static char charAt(long firstHalf, long secondHalf, int length, int index) {
         InlineString.checkIndex(index, length);
         return (char)codePointAt(firstHalf, secondHalf, index);
     }
 
-    static int codePointAt(long firstHalf, long secondHalf, int index) {
-        long chosenHalf = ((index & Long.BYTES) != 0) ? secondHalf : firstHalf;
-        return (int)((chosenHalf >> ((index & (Long.BYTES - 1)) * Byte.SIZE)) & 0xff);
+    public static int codePointAt(long firstHalf, long secondHalf, int index) {
+        return Byte.toUnsignedInt((byte)getCharHelper(firstHalf, secondHalf, index));
     }
 
     /**
@@ -41,7 +46,7 @@ class StringCompressed {
      * 0 <= srcBegin <= srcEnd <= length <= 16
      * 0 <= dstBegin <= dstBegin + (srcEnd - srcBegin) <= dst.length
      */
-    static void getChars(long firstHalf, long secondHalf, int srcBegin, int srcEnd, char[] dst, int dstBegin) {
+    public static void getChars(long firstHalf, long secondHalf, int srcBegin, int srcEnd, char[] dst, int dstBegin) {
         var data = LongVector.zero(LongVector.SPECIES_128)
                 .withLane(0, firstHalf)
                 .withLane(1, secondHalf)
@@ -58,7 +63,7 @@ class StringCompressed {
     /**
      * s1 is compressed while s2 is a Latin1 string (maybe compressed)
      */
-    static int compareToLatin1(InlineString s1, InlineString s2) {
+    public static int compareToLatin1(InlineString s1, InlineString s2) {
         var data1 = LongVector.zero(LongVector.SPECIES_128)
                 .withLane(0, s1.firstHalf())
                 .withLane(1, s1.secondHalf())
@@ -92,7 +97,7 @@ class StringCompressed {
     /**
      * s1 is compressed while s2 is a UTF16 string
      */
-    static int compareToUTF16(InlineString s1, InlineString s2) {
+    public static int compareToUTF16(InlineString s1, InlineString s2) {
         // fast path
         if (s1.isEmpty()) {
             return -s2.length();
@@ -153,7 +158,7 @@ class StringCompressed {
      * 0 <= offset1 < offset1 + len <= s1.length() <= 16
      * 0 <= offset2 < offset2 + len <= s2.length()
      */
-    static boolean regionMatchesLatin1(InlineString s1, int offset1, InlineString s2, int offset2, int len) {
+    public static boolean regionMatchesLatin1(InlineString s1, int offset1, InlineString s2, int offset2, int len) {
         // Align 2 vectors to have corresponding regions at [offset1, offset1 + len[
         var data1 = LongVector.zero(LongVector.SPECIES_128)
                 .withLane(0, s1.firstHalf())
@@ -190,7 +195,7 @@ class StringCompressed {
      * 0 <= offset1 < offset1 + len <= s1.length()
      * 0 <= offset2 < offset2 + len <= s2.length()
      */
-    static boolean regionMatchesUTF16(InlineString s1, int offset1, InlineString s2, int offset2, int len) {
+    public static boolean regionMatchesUTF16(InlineString s1, int offset1, InlineString s2, int offset2, int len) {
         // fast path
         int c1 = StringCompressed.codePointAt(s1.firstHalf(), s1.secondHalf(), offset1);
         int c2 = StringUTF16.charAt(s2.value(), offset2);
@@ -263,9 +268,9 @@ class StringCompressed {
     /**
      * 0 <= length <= 16
      */
-    static int hashCode(long firstHalf, long secondHalf, int length) {
+    public static int hashCode(long firstHalf, long secondHalf, int length) {
         final int tempResult;
-        if (IntVector.SPECIES_PREFERRED.length() >= StringCompressed.COMPRESS_THRESHOLD) {
+        if (IntVector.SPECIES_PREFERRED.length() >= Long.BYTES * 2) {
             // bitSize == 512
             var intSpecies = IntVector.SPECIES_512;
             var dataAsInts = LongVector.zero(LongVector.SPECIES_128)
@@ -302,7 +307,7 @@ class StringCompressed {
     /**
      * 0 <= length <= 16
      */
-    static int indexOf(long firstHalf, long secondHalf, int length, int ch, int fromIndex) {
+    public static int indexOf(long firstHalf, long secondHalf, int length, int ch, int fromIndex) {
         if (!StringLatin1.canEncode(ch)) {
             return -1;
         }
@@ -320,7 +325,7 @@ class StringCompressed {
     /**
      * 0 <= length <= 16
      */
-    static int lastIndexOf(long firstHalf, long secondHalf, int length, int ch, int fromIndex) {
+    public static int lastIndexOf(long firstHalf, long secondHalf, int length, int ch, int fromIndex) {
         if (!StringLatin1.canEncode(ch)) {
             return -1;
         }
@@ -338,7 +343,7 @@ class StringCompressed {
     /**
      * 0 <= index <= index + len <= 16
      */
-    static InlineString newString(long firstHalf, long secondHalf, int index, int len) {
+    public static InlineString newString(long firstHalf, long secondHalf, int index, int len) {
         var data = LongVector.zero(LongVector.SPECIES_128)
                 .withLane(0, firstHalf)
                 .withLane(1, secondHalf)
@@ -352,10 +357,9 @@ class StringCompressed {
     /**
      * Concat 2 compressed strings into a compressed string
      *
-     * <p>
-     * length1 + length2 <= 16
+     * <p> length1 + length2 <= 16
      */
-    static InlineString concat(InlineString s1, InlineString s2) {
+    public static InlineString concat(InlineString s1, InlineString s2) {
         var data1 = LongVector.zero(LongVector.SPECIES_128)
                 .withLane(0, s1.firstHalf())
                 .withLane(1, s1.secondHalf())
@@ -369,10 +373,7 @@ class StringCompressed {
         return new InlineString(InlineString.SMALL_STRING_VALUE, s1.length() + s2.length(), data.lane(0), data.lane(1));
     }
 
-    /**
-     * 0 <= length
-     */
-    static InlineString replace(long firstHalf, long secondHalf, int length, char oldChar, char newChar) {
+    public static InlineString replace(long firstHalf, long secondHalf, int length, char oldChar, char newChar) {
         if (StringLatin1.canEncode(oldChar)) {
             var data = LongVector.zero(LongVector.SPECIES_128)
                     .withLane(0, firstHalf)
@@ -415,6 +416,97 @@ class StringCompressed {
             }
         }
         return new InlineString(InlineString.SMALL_STRING_VALUE, length, firstHalf, secondHalf);
+    }
+
+    public static InlineString trim(long firstHalf, long secondHalf) {
+        var data = LongVector.zero(LongVector.SPECIES_128)
+                .withLane(0, firstHalf)
+                .withLane(1, secondHalf)
+                .reinterpretAsBytes();
+        var mask = data.compare(VectorOperators.UNSIGNED_GT, (byte)' ');
+        int st = mask.firstTrue();
+        if (st == ByteVector.SPECIES_128.length()) {
+            return InlineString.EMPTY_STRING;
+        }
+        int len = mask.lastTrue() + 1;
+        data = data.rearrange(BYTE_SLICE[st & (BYTE_SLICE.length - 1)])
+                .blend((byte)0, BYTE_INDEX_VECTOR.compare(VectorOperators.GE, (byte)(len - st)));
+        var dataAsLongs = data.reinterpretAsLongs();
+        return new InlineString(InlineString.SMALL_STRING_VALUE, len - st, dataAsLongs.lane(0), dataAsLongs.lane(1));
+    }
+
+    public static InlineString strip(long firstHalf, long secondHalf, int length) {
+        int left = indexOfNonWhitespace(firstHalf, secondHalf, length);
+        if (left == length) {
+            return InlineString.EMPTY_STRING;
+        }
+        int right = lastIndexOfNonWhitespace(firstHalf, secondHalf, length);
+        boolean ifChanged = (left > 0) || (right < length);
+        return ifChanged
+                ? newString(firstHalf, secondHalf, left, right - left)
+                : new InlineString(InlineString.SMALL_STRING_VALUE, length, firstHalf, secondHalf);
+    }
+
+    public static InlineString stripLeading(long firstHalf, long secondHalf, int length) {
+        int left = indexOfNonWhitespace(firstHalf, secondHalf, length);
+        return (left != 0)
+                ? newString(firstHalf, secondHalf, left, length - left)
+                : new InlineString(InlineString.SMALL_STRING_VALUE, length, firstHalf, secondHalf);
+    }
+
+    public static InlineString stripTrailing(long firstHalf, long secondHalf, int length) {
+        int right = lastIndexOfNonWhitespace(firstHalf, secondHalf, length);
+        return (right != length)
+                ? newString(firstHalf, secondHalf, 0, right)
+                : new InlineString(InlineString.SMALL_STRING_VALUE, length, firstHalf, secondHalf);
+    }
+
+    public static Stream<InlineString.ref> lines(long firstHalf, long secondHalf, int length) {
+        return StreamSupport.stream(LinesSpliterator.spliterator(firstHalf, secondHalf, length), false);
+    }
+
+    public static Spliterator.OfInt charSpliterator(long firstHalf, long secondHalf, int length) {
+        return new CharsSpliterator(firstHalf, secondHalf, 0, length);
+    }
+
+    public static int indexOfNonWhitespace(long firstHalf, long secondHalf, int length) {
+        long temp = firstHalf;
+        int i = 0;
+        for (; i < Math.min(Long.BYTES, length); i++) {
+            if (!Character.isWhitespace(Byte.toUnsignedInt((byte)temp))) {
+                return i;
+            }
+            temp >>>= Byte.SIZE;
+        }
+        temp = secondHalf;
+        for (; i < length; i++) {
+            if (!Character.isWhitespace(Byte.toUnsignedInt((byte)temp))) {
+                return i;
+            }
+            temp >>>= Byte.SIZE;
+        }
+        return length;
+    }
+
+    public static int lastIndexOfNonWhitespace(long firstHalf, long secondHalf, int length) {
+        long temp = Long.reverseBytes(secondHalf);
+        int i = length;
+        temp >>>= (Long.SIZE * 2 - length * Byte.SIZE);
+        for (; i > Long.BYTES; i--) {
+            if (!Character.isWhitespace(Byte.toUnsignedInt((byte)temp))) {
+                return i;
+            }
+            temp >>>= Byte.SIZE;
+        }
+        temp = Long.reverseBytes(firstHalf);
+        temp >>>= (Long.SIZE - Math.min(Long.BYTES, length) * Byte.SIZE);
+        for (; i > 0; i--) {
+            if (!Character.isWhitespace(Byte.toUnsignedInt((byte)temp))) {
+                return i;
+            }
+            temp >>>= Byte.SIZE;
+        }
+        return 0;
     }
 
     static boolean compressible(int length, byte coder) {
@@ -612,6 +704,175 @@ class StringCompressed {
                     .convertShape(VectorOperators.ZERO_EXTEND_B2S, ShortVector.SPECIES_128, 0)
                     .reinterpretAsLongs();
             decompress(dataSecond.lane(0), dataSecond.lane(1), dst, dstOff + Long.BYTES * Short.BYTES, len);
+        }
+    }
+
+    private static long getCharHelper(long firstHalf, long secondHalf, int index) {
+        long chosenHalf = (index & Long.BYTES) != 0 ? secondHalf : firstHalf;
+        return chosenHalf >>> ((index & (Long.BYTES - 1)) * Byte.SIZE);
+    }
+
+    private static final class LinesSpliterator implements Spliterator<InlineString.ref> {
+        private long firstHalf, secondHalf;
+        private int index;        // current index, modified on advance/split
+        private final int fence;  // one past last index
+
+        private LinesSpliterator(long firstHalf, long secondHalf, int start, int length) {
+            this.firstHalf = firstHalf;
+            this.secondHalf = secondHalf;
+            this.index = start;
+            this.fence = start + length;
+        }
+
+        private int indexOfLineSeparator(int start) {
+            long temp = getCharHelper(firstHalf, secondHalf, start);
+            int current = start;
+            for (; current < Math.min(fence, Long.BYTES + (start & Long.BYTES)); current++, temp >>>= Byte.SIZE) {
+                int ch = Byte.toUnsignedInt((byte)temp);
+                if (ch == '\n' || ch == '\r') {
+                    return current;
+                }
+            }
+            temp = secondHalf;
+            for (; current < fence; current++, temp >>>= Byte.SIZE) {
+                int ch = Byte.toUnsignedInt((byte)temp);
+                if (ch == '\n' || ch == '\r') {
+                    return current;
+                }
+            }
+            return fence;
+        }
+
+        private int skipLineSeparator(int start) {
+            if (start < fence) {
+                long temp = getCharHelper(firstHalf, secondHalf, start);
+                if (Byte.toUnsignedInt((byte)temp) == '\r') {
+                    int next = start + 1;
+                    if (next < fence) {
+                        if (next == Long.BYTES) {
+                            temp = secondHalf;
+                        } else {
+                            temp >>>= Byte.SIZE;
+                        }
+                        if (Byte.toUnsignedInt((byte)temp) == '\n') {
+                            return next + 1;
+                        }
+                    }
+                }
+            }
+            return fence;
+        }
+
+        private InlineString next() {
+            int start = index;
+            int end = indexOfLineSeparator(start);
+            index = skipLineSeparator(end);
+            return newString(firstHalf, secondHalf, start, end - start);
+        }
+
+        @Override
+        public boolean tryAdvance(Consumer<? super InlineString.ref> action) {
+            if (action == null) {
+                throw new NullPointerException("tryAdvance action missing");
+            }
+            if (index != fence) {
+                action.accept(next());
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public void forEachRemaining(Consumer<? super InlineString.ref> action) {
+            if (action == null) {
+                throw new NullPointerException("forEachRemaining action missing");
+            }
+            while (index != fence) {
+                action.accept(next());
+            }
+        }
+
+        @Override
+        public Spliterator<InlineString.ref> trySplit() {
+            int half = (fence + index) >>> 1;
+            int mid = skipLineSeparator(indexOfLineSeparator(half));
+            if (mid < fence) {
+                int start = index;
+                index = mid;
+                return new LinesSpliterator(firstHalf, secondHalf, start, mid - start);
+            }
+            return null;
+        }
+
+        @Override
+        public long estimateSize() {
+            return fence - index + 1;
+        }
+
+        @Override
+        public int characteristics() {
+            return Spliterator.ORDERED | Spliterator.IMMUTABLE | Spliterator.NONNULL;
+        }
+
+        static LinesSpliterator spliterator(long firstHalf, long secondHalf, int length) {
+            return new LinesSpliterator(firstHalf, secondHalf, 0, length);
+        }
+    }
+
+    private static class CharsSpliterator implements Spliterator.OfInt {
+        long firstHalf, secondHalf;
+        int index;
+        int fence;
+
+        CharsSpliterator(long firstHalf, long secondHalf, int index, int fence) {
+            this.firstHalf = firstHalf;
+            this.secondHalf = secondHalf;
+            this.index = index;
+            this.fence = fence;
+        }
+
+        @Override
+        public OfInt trySplit() {
+            int lo = index;
+            int mid = (lo + fence) >>> 1;
+            return mid > lo
+                    ? new CharsSpliterator(firstHalf, secondHalf, lo, index = mid):
+                    null;
+        }
+
+        @Override
+        public boolean tryAdvance(IntConsumer action) {
+            Objects.requireNonNull(action);
+            if (index < fence) {
+                long temp = getCharHelper(firstHalf, secondHalf, index++);
+                action.accept(Byte.toUnsignedInt((byte)temp));
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public void forEachRemaining(IntConsumer action) {
+            Objects.requireNonNull(action);
+            long temp = getCharHelper(firstHalf, secondHalf, index);
+            int start = index;
+            for (; index < Math.min(fence, Long.BYTES + (start & Long.BYTES)); index++, temp >>>= Byte.SIZE) {
+                action.accept(Byte.toUnsignedInt((byte)temp));
+            }
+            temp = secondHalf;
+            for (; index < fence; index++, temp >>>= Byte.SIZE) {
+                action.accept(Byte.toUnsignedInt((byte)temp));
+            }
+        }
+
+        @Override
+        public long estimateSize() {
+            return fence - index;
+        }
+
+        @Override
+        public int characteristics() {
+            return Spliterator.IMMUTABLE | Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED;
         }
     }
 }

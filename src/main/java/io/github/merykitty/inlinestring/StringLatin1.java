@@ -20,7 +20,7 @@ final class StringLatin1 {
     }
 
     public static boolean canEncode(int cp) {
-        return cp < 0x100;
+        return (cp >>> Byte.SIZE) == 0;
     }
 
     public static char[] toChars(byte[] value) {
@@ -318,7 +318,7 @@ final class StringLatin1 {
             len--;
         }
         return ((st > 0) || (len < value.length)) ?
-                newString(value, st, len - st) : new InlineString(value, Utils.LATIN1);
+                newString(value, st, len - st) : new InlineString(value, len, Utils.LATIN1, 0);
     }
 
     public static int indexOfNonWhitespace(byte[] value) {
@@ -350,17 +350,23 @@ final class StringLatin1 {
         }
         int right = lastIndexOfNonWhitespace(value);
         boolean ifChanged = (left > 0) || (right < value.length);
-        return ifChanged ? newString(value, left, right - left) : new InlineString(value, Utils.LATIN1);
+        return ifChanged
+                ? newString(value, left, right - left)
+                : new InlineString(value, value.length, Utils.LATIN1, 0);
     }
 
     public static InlineString stripLeading(byte[] value) {
         int left = indexOfNonWhitespace(value);
-        return (left != 0) ? newString(value, left, value.length - left) : new InlineString(value, Utils.LATIN1);
+        return (left != 0)
+                ? newString(value, left, value.length - left)
+                : new InlineString(value, value.length, Utils.LATIN1, 0);
     }
 
     public static InlineString stripTrailing(byte[] value) {
         int right = lastIndexOfNonWhitespace(value);
-        return (right != value.length) ? newString(value, 0, right) : new InlineString(value, Utils.LATIN1);
+        return (right != value.length)
+                ? newString(value, 0, right)
+                : new InlineString(value, value.length, Utils.LATIN1, 0);
     }
 
     public static char getChar(byte[] val, int index) {
@@ -540,7 +546,7 @@ final class StringLatin1 {
             if (mid < fence) {
                 int start = index;
                 index = mid;
-                return new StringLatin1.LinesSpliterator(value, start, mid - start);
+                return new LinesSpliterator(value, start, mid - start);
             }
             return null;
         }

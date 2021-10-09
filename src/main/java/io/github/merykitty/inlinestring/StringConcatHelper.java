@@ -1,11 +1,14 @@
 package io.github.merykitty.inlinestring;
 
 import io.github.merykitty.inlinestring.internal.Utils;
+import jdk.internal.misc.Unsafe;
 
 import java.lang.invoke.MethodHandle;
 import static java.lang.invoke.MethodType.methodType;
 
 final class StringConcatHelper {
+    private static final Unsafe UNSAFE = Unsafe.getUnsafe();
+
     @__primitive__
     record IndexCoder(int index, byte coder) {}
 
@@ -41,20 +44,19 @@ final class StringConcatHelper {
         }
     }
 
+    /**
+     * Allocate an uninitialized byte array data of a string
+     *
+     * @param length the length of the string
+     * @param coder the coder, LATIN1 or UTF16
+     * @return the allocated byte array
+     */
     public static byte[] newArray(int length, byte coder) {
-        try {
-            return (byte[]) NEW_ARRAY.invokeExact(((long)coder << Integer.SIZE) | length);
-        } catch (RuntimeException | Error e) {
-            throw e;
-        } catch (Throwable e) {
-            throw new RuntimeException(e);
-        }
+        return (byte[])UNSAFE.allocateUninitializedArray(Byte.TYPE, length << coder);
     }
 
-    private static final MethodHandle NEW_ARRAY;
-
     /**
-     * Prepends the stringly representation of String index into buffer,
+     * Prepends the string representation of String index into buffer,
      * given the coder and final index. Index is measured in chars, not in bytes!
      *
      * @param indexCoder final char index in the buffer, along with coder packed
@@ -76,8 +78,7 @@ final class StringConcatHelper {
      * @return String       resulting string
      */
     private static InlineString newString(byte[] buf, IndexCoder indexCoder) {
-        // Use the private, non-copying constructor (unsafe!)
-        return new InlineString(buf, buf.length, indexCoder.coder(), 0);
+        return new InlineString(buf, buf.length >>> indexCoder.coder(), indexCoder.coder(), 0);
     }
 
     /**
@@ -86,16 +87,5 @@ final class StringConcatHelper {
      */
     private static IndexCoder initialCoder() {
         return Utils.COMPACT_STRINGS ? new IndexCoder(0, Utils.LATIN1) : new IndexCoder(0, Utils.UTF16);
-    }
-
-    static {
-        try {
-            var lookup = Utils.STRING_LOOKUP;
-            var klass = lookup.findClass("java.lang.StringConcatHelper");
-            NEW_ARRAY = lookup.findStatic(klass, "newArray", methodType(Byte.TYPE.arrayType(),
-                    Long.TYPE));
-        } catch (Exception e) {
-            throw new AssertionError(e);
-        }
     }
 }

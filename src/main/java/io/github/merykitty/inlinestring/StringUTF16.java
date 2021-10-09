@@ -565,8 +565,8 @@ final class StringUTF16 {
             len--;
         }
         return ((st > 0) || (len < length )) ?
-                new InlineString(Arrays.copyOfRange(value, st << 1, len << 1), Utils.UTF16) :
-                new InlineString(value, Utils.UTF16);
+                new InlineString(Arrays.copyOfRange(value, st << 1, len << 1), len - st, Utils.UTF16, 0) :
+                new InlineString(value, len, Utils.UTF16, 0);
     }
 
     public static int indexOfNonWhitespace(byte[] value) {
@@ -599,19 +599,25 @@ final class StringUTF16 {
         }
         int right = lastIndexOfNonWhitespace(value);
         boolean ifChanged = (left > 0) || (right < length);
-        return ifChanged ? newString(value, left, right - left) : new InlineString(value, Utils.UTF16);
+        return ifChanged
+                ? newString(value, left, right - left)
+                : new InlineString(value, length, Utils.UTF16, 0);
     }
 
     public static InlineString stripLeading(byte[] value) {
         int length = value.length >>> 1;
         int left = indexOfNonWhitespace(value);
-        return (left != 0) ? newString(value, left, length - left) : new InlineString(value, Utils.UTF16);
+        return (left != 0)
+                ? newString(value, left, length - left)
+                : new InlineString(value, length, Utils.UTF16, 0);
     }
 
     public static InlineString stripTrailing(byte[] value) {
         int length = value.length >>> 1;
         int right = lastIndexOfNonWhitespace(value);
-        return (right != length) ? newString(value, 0, right) : new InlineString(value, Utils.UTF16);
+        return (right != length)
+                ? newString(value, 0, right)
+                : new InlineString(value, length, Utils.UTF16, 0);
     }
 
     static Stream<InlineString.ref> lines(byte[] value) {
@@ -627,7 +633,7 @@ final class StringUTF16 {
                         .withLane(0, dataFirstCompressed.firstHalf())
                         .withLane(1, dataFirstCompressed.secondHalf())
                         .reinterpretAsShorts();
-                if (dataFirst.compare(VectorOperators.LT, (short)0x100).allTrue()) {
+                if (dataFirst.compare(VectorOperators.UNSIGNED_LT, (short)0x100).allTrue()) {
                     long firstHalf = dataFirst.castShape(ByteVector.SPECIES_128, 0)
                             .reinterpretAsLongs()
                             .lane(0);
@@ -638,7 +644,7 @@ final class StringUTF16 {
                                 .withLane(0, dataSecondCompressed.firstHalf())
                                 .withLane(1, dataSecondCompressed.secondHalf())
                                 .reinterpretAsShorts();
-                        if (dataSecond.compare(VectorOperators.LT, (short)0x100).allTrue()) {
+                        if (dataSecond.compare(VectorOperators.UNSIGNED_LT, (short)0x100).allTrue()) {
                             long secondHalf = dataSecond.castShape(ByteVector.SPECIES_128, 0)
                                     .reinterpretAsLongs()
                                     .lane(0);
