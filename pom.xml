@@ -21,7 +21,7 @@
         <junit.version>5.8.0</junit.version>
         <maven-surefile-plugin.version>3.0.0-M5</maven-surefile-plugin.version>
         <maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
-        <jmh.version>1.33</jmh.version>
+        <jmh.version>1.34</jmh.version>
     </properties>
 
     <dependencies>
@@ -91,7 +91,7 @@
                         </goals>
                         <configuration>
                             <classpathScope>test</classpathScope>
-                            <executable>java</executable>
+                            <executable>/home/merykitty/java/openjdk/valhalla/build/linux-x86_64-server-fastdebug/images/jdk/bin/java</executable>
                             <arguments>
                                 <argument>-cp</argument>
                                 <modulepath/>
@@ -101,13 +101,17 @@
                                 <argument>--add-exports</argument>
                                 <argument>java.base/jdk.internal.misc=ALL-UNNAMED</argument>
                                 <argument>-XX:+UnlockDiagnosticVMOptions</argument>
-<!--                                <argument>-XX:+PrintCompilation</argument>-->
-                                <argument>-XX:CompileCommand=print,*BasicBenchmark.test</argument>
+<!--                                <argument>-XX:+UseSerialGC</argument>-->
+                                <argument>-XX:-TieredCompilation</argument>
+<!--                                <argument>-XX:+PrintIntrinsics</argument>-->
+<!--                                <argument>-XX:LoopUnrollLimit=1</argument>-->
                                 <argument>-Djmh.blackhole.mode=COMPILER</argument>
+<!--                                <argument>-XX:CompileCommand=print,*Validator.validate</argument>-->
+                                <argument>-Djdk.incubator.vector.VECTOR_ACCESS_OOB_CHECK=0</argument>
                                 <argument>io.github.merykitty.inlinestring.benchmark.BenchmarkEntry</argument>
-                                <argument>BasicBenchmark</argument>
+                                <argument>ValidatorBenchmark</argument>
                                 <argument>-prof</argument>
-                                <argument>gc</argument>
+                                <argument>perfasm:tooBigThreshold=10000</argument>
                             </arguments>
                         </configuration>
                     </execution>

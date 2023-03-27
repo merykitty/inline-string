@@ -6,9 +6,9 @@ import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SegmentAllocator;
 import jdk.incubator.vector.*;
+import jdk.internal.misc.Unsafe;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
-import sun.misc.Unsafe;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -33,21 +33,7 @@ public class CompressBenchmark {
     long firstHalf;
     long secondHalf;
 
-    private static final Unsafe UNSAFE;
-
-    private static final VarHandle BYTE_ARRAY_AS_LONGS = MethodHandles.byteArrayViewVarHandle(Long.TYPE.arrayType(), ByteOrder.nativeOrder());
-    private static final VarHandle BYTE_ARRAY_AS_INTS = MethodHandles.byteArrayViewVarHandle(Integer.TYPE.arrayType(), ByteOrder.nativeOrder());
-    private static final VarHandle BYTE_ARRAY_AS_SHORTS = MethodHandles.byteArrayViewVarHandle(Short.TYPE.arrayType(), ByteOrder.nativeOrder());
-
-    static {
-        try {
-            var unsafe = Unsafe.class.getDeclaredField("theUnsafe");
-            unsafe.setAccessible(true);
-            UNSAFE = (Unsafe) unsafe.get(null);
-        } catch (Exception e) {
-            throw new AssertionError(e);
-        }
-    }
+    private static final Unsafe UNSAFE = Unsafe.getUnsafe();
 
     @__primitive__
     record SmallString(long firstHalf, long secondHalf) {}
@@ -73,7 +59,6 @@ public class CompressBenchmark {
             }
             bytesToLongs();
             longsToBytes();
-            charsToLong();
         }
     }
 
@@ -113,26 +98,27 @@ public class CompressBenchmark {
 
     private static SmallString compress(byte[] value, int offset, int length) {
         final long firstHalf, secondHalf;
+        // index >= 16
         if (length >= Long.BYTES * 2) {
-            firstHalf = UNSAFE.getLong(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + offset);
-            secondHalf = UNSAFE.getLong(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + offset + Long.BYTES);
+            firstHalf = UNSAFE.getLongUnaligned(value, (long)offset + Unsafe.ARRAY_BYTE_BASE_OFFSET);
+            secondHalf = UNSAFE.getLongUnaligned(value, (long)offset + Long.BYTES + Unsafe.ARRAY_BYTE_BASE_OFFSET);
         } else {
             long temp = 0;
             int tempOffset = offset + length;
             if ((length & Byte.BYTES) != 0) {
                 tempOffset--;
-                temp = Byte.toUnsignedLong(UNSAFE.getByte(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + tempOffset));
+                temp = Byte.toUnsignedLong(UNSAFE.getByte(value, (long)tempOffset + Unsafe.ARRAY_BYTE_BASE_OFFSET));
             }
             if ((length & Short.BYTES) != 0) {
                 tempOffset -= Short.BYTES;
-                temp = (temp << Short.SIZE) | Short.toUnsignedLong(UNSAFE.getShort(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + tempOffset));
+                temp = (temp << Short.SIZE) | Short.toUnsignedLong(UNSAFE.getShortUnaligned(value, (long)tempOffset + Unsafe.ARRAY_BYTE_BASE_OFFSET));
             }
             if ((length & Integer.BYTES) != 0) {
                 tempOffset -= Integer.BYTES;
-                temp = (temp << Integer.SIZE) | Integer.toUnsignedLong(UNSAFE.getInt(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + tempOffset));
+                temp = (temp << Integer.SIZE) | Integer.toUnsignedLong(UNSAFE.getIntUnaligned(value, (long)tempOffset + Unsafe.ARRAY_BYTE_BASE_OFFSET));
             }
             if ((length & Long.BYTES) != 0) {
-                firstHalf = UNSAFE.getLong(value, Unsafe.ARRAY_BYTE_BASE_OFFSET + offset);
+                firstHalf = UNSAFE.getLongUnaligned(value, (long)offset + Unsafe.ARRAY_BYTE_BASE_OFFSET);
                 secondHalf = temp;
             } else {
                 firstHalf = temp;
@@ -143,30 +129,30 @@ public class CompressBenchmark {
     }
 
     private static void uncompress(byte[] dst, int offset, int length, long firstHalf, long secondHalf) {
-        Objects.checkFromIndexSize(offset, length, dst.length);
-        if (length == Long.BYTES * 2) {
-            BYTE_ARRAY_AS_LONGS.set(dst, offset, firstHalf);
-            BYTE_ARRAY_AS_LONGS.set(dst, offset + Long.BYTES, secondHalf);
+        // index >= 16
+        if (length >= Long.BYTES * 2) {
+            UNSAFE.putLongUnaligned(dst, offset + Unsafe.ARRAY_BYTE_BASE_OFFSET, firstHalf);
+            UNSAFE.putLongUnaligned(dst, offset + Long.BYTES + Unsafe.ARRAY_BYTE_BASE_OFFSET, secondHalf);
         } else {
             long temp = firstHalf;
             int tempOffset = offset;
             if ((length & Long.BYTES) != 0) {
-                BYTE_ARRAY_AS_LONGS.set(dst, tempOffset, temp);
+                UNSAFE.putLongUnaligned(dst, tempOffset + Unsafe.ARRAY_BYTE_BASE_OFFSET, temp);
                 temp = secondHalf;
                 tempOffset += Long.BYTES;
             }
             if ((length & Integer.BYTES) != 0) {
-                BYTE_ARRAY_AS_INTS.set(dst, tempOffset, (int)temp);
+                UNSAFE.putIntUnaligned(dst, tempOffset + Unsafe.ARRAY_BYTE_BASE_OFFSET, (int)temp);
                 temp >>>= Integer.SIZE;
                 tempOffset += Integer.BYTES;
             }
             if ((length & Short.BYTES) != 0) {
-                BYTE_ARRAY_AS_SHORTS.set(dst, tempOffset, (short)temp);
+                UNSAFE.putShortUnaligned(dst, tempOffset + Unsafe.ARRAY_BYTE_BASE_OFFSET, (short)temp);
                 temp >>>= Short.SIZE;
                 tempOffset += Short.BYTES;
             }
             if ((length & Byte.BYTES) != 0) {
-                dst[tempOffset] = (byte)temp;
+                UNSAFE.putByte(dst, tempOffset + Unsafe.ARRAY_BYTE_BASE_OFFSET, (byte)temp);
             }
         }
     }

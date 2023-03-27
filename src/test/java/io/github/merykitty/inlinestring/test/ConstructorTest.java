@@ -1,18 +1,17 @@
 package io.github.merykitty.inlinestring.test;
 
 import io.github.merykitty.inlinestring.InlineString;
-import static io.github.merykitty.inlinestring.test.Utils.*;
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
-import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.charset.Charset;
 import java.util.random.RandomGenerator;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+
+import static io.github.merykitty.inlinestring.test.Utils.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ConstructorTest {
 

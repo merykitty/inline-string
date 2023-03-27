@@ -13,7 +13,7 @@ import java.util.random.RandomGenerator;
 @Warmup(iterations = 5)
 @Measurement(iterations = 5)
 public class CharAtBenchmark {
-    @Param({"Hello world!", "This is an example of a Latin1 long string", "Đây là một UTF16 String"})
+    @Param({"Hello World!", "This is an example of a Latin1 long string", "Đây là một UTF16 String"})
     private String param;
 
     String str;

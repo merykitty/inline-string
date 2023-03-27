@@ -446,7 +446,8 @@ public class MethodTest {
     @MethodSource("indexOfStringIntData")
     public void indexOf(IndexOfStringIntData data) {
         assertEquals(data.str0().indexOf(data.str1(), data.fromIndex()),
-                data.inlStr0().indexOf(data.inlStr1(), data.fromIndex()));
+                data.inlStr0().indexOf(data.inlStr1(), data.fromIndex()),
+                "Parameters: <" + data.str0() + ">, <" + data.str1() + ">, <" + data.fromIndex() + ">");
     }
 
     @ParameterizedTest
