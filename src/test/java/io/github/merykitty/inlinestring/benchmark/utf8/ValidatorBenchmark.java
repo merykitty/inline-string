@@ -1,13 +1,12 @@
 package io.github.merykitty.inlinestring.benchmark.utf8;
 
-import io.github.merykitty.inlinestring.utf8.Validator;
+import io.github.merykitty.inlinestring.encoding.utf8.Validator;
 import org.openjdk.jmh.annotations.*;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.TimeUnit;
 
 @BenchmarkMode(Mode.Throughput)
 @State(Scope.Benchmark)

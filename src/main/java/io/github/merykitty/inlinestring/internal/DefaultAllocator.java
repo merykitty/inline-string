@@ -20,29 +20,25 @@ public class DefaultAllocator implements SegmentAllocator {
             throw new OutOfMemoryError("fail to malloc " + byteSize + " bytes");
         }
 
-        var scope = SegmentScope.auto();
-        return MemorySegment.ofAddress(
-                address,
-                byteSize,
-                scope,
-                () -> free(address)
-        );
+        var arena = Arena.ofAuto();
+        return MemorySegment.ofAddress(address)
+                .reinterpret(byteSize, arena, s -> free(address));
     }
 
     private static final DefaultAllocator INSTANCE = new DefaultAllocator();
-    private static final long POINTER_SIZE = ValueLayout.ADDRESS.bitSize();
+    private static final long POINTER_SIZE = ValueLayout.ADDRESS.byteSize();
     private static final MethodHandle MALLOC;
     private static final MethodHandle FREE;
 
     static {
-        if (POINTER_SIZE != 64 && POINTER_SIZE != 32) {
+        if (POINTER_SIZE != 8 && POINTER_SIZE != 4) {
             throw new AssertionError();
         }
         var linker = Linker.nativeLinker();
         var lib = linker.defaultLookup();
         var mallocSymbol = lib.find("malloc").get();
         var freeSymbol = lib.find("free").get();
-        if (POINTER_SIZE == 64) {
+        if (POINTER_SIZE == 8) {
             MALLOC = linker.downcallHandle(mallocSymbol,
                     FunctionDescriptor.of(ValueLayout.JAVA_LONG,
                             ValueLayout.JAVA_LONG));
@@ -61,10 +57,10 @@ public class DefaultAllocator implements SegmentAllocator {
 
     private static long malloc(long byteSize) {
         try {
-            if (POINTER_SIZE == 64) {
+            if (POINTER_SIZE == 8) {
                 return (long)MALLOC.invokeExact(byteSize);
             } else {
-                return (int)MALLOC.invokeExact((int)byteSize);
+                return Integer.toUnsignedLong((int)MALLOC.invokeExact((int)byteSize));
             }
         } catch (Throwable e) {
             throw new RuntimeException(e);
@@ -73,7 +69,7 @@ public class DefaultAllocator implements SegmentAllocator {
 
     private static void free(long ptr) {
         try {
-            if (POINTER_SIZE == 64) {
+            if (POINTER_SIZE == 8) {
                 FREE.invokeExact(ptr);
             } else {
                 FREE.invokeExact((int)ptr);
